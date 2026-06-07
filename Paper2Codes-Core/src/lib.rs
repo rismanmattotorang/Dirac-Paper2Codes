@@ -73,6 +73,7 @@ pub mod prompts;
 pub mod recovery;
 pub mod reproduction;
 pub mod retrieval;
+pub mod skills;
 pub mod storage;
 pub mod symbolic;
 pub mod types;

@@ -10,8 +10,17 @@ import { SettingsPage } from "./settings/settings-page"
 import { CodeGenerationPage } from "./code/code-generation-page"
 import { TasksPage } from "./tasks/tasks-page"
 import { ToolsPage } from "./tools/tools-page"
+import { SkillsPage } from "./skills/skills-page"
 
-export type PageId = "dashboard" | "papers" | "tasks" | "code" | "tools" | "analytics" | "settings"
+export type PageId =
+  | "dashboard"
+  | "papers"
+  | "skills"
+  | "tasks"
+  | "code"
+  | "tools"
+  | "analytics"
+  | "settings"
 
 interface RouterContextType {
   currentPage: PageId
@@ -47,6 +56,8 @@ export function PageRenderer({ page }: { page: PageId }) {
             return <Dashboard />
           case "papers":
             return <PapersPage />
+          case "skills":
+            return <SkillsPage />
           case "tasks":
             return <TasksPage />
           case "code":

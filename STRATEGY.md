@@ -119,6 +119,15 @@ testable. Closes gap #3.
   `RubricGrader` are traits, so the runner is unit-tested with mocks while the
   CLI wraps the real coordinator. Makes "superior" measurable and regression-safe.
 
+### Domain Skills layer  ✅ *shipped*
+Modular, reusable, user-improvable domain specialisations (Agent Skills
+convention) spanning Computational Finance, Physics, Chemistry,
+Biology/Bioinformatics, Genomics, Quantum Computation, CFD, and Supply Chain.
+A selected skill biases retrieval keywords, injects a domain expertise primer +
+language-specific library recommendations into generation, and contributes
+verification invariants. Choosable/improvable via `/api/skills`, the Web UI
+*Domain Skills* page, and the TUI. See [SKILLS.md](SKILLS.md).
+
 ### Phase 6 — Graph-native retrieval (leverage SurrealDB)  ✅ *shipped in this PR*
 - **Topological generation ordering**: `GraphAnalyzer::topological_order`
   (Kahn's algorithm, deterministic, cycle-safe) orders modules so each is
