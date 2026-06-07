@@ -156,6 +156,13 @@ export async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/skills", async (route) => {
     await route.fulfill({ json: MOCK_SKILLS })
   })
+  // Single-skill detail (used by the selected-skill banner).
+  await page.route("**/api/skills/*", async (route) => {
+    const match = route.request().url().match(/skills\/([^/?]+)/)
+    const id = match ? decodeURIComponent(match[1]) : ""
+    const skill = MOCK_SKILLS.find((s) => s.id === id) ?? MOCK_SKILLS[0]
+    await route.fulfill({ json: skill })
+  })
 }
 
 /** Mock the settings + LLM-key endpoints (call after {@link mockApi}). */

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { IconUpload, IconFile, IconX, IconLoader, IconCheckCircle } from "@/components/ui/icons"
 import { uploadPaper, processPaper } from "@/lib/api/papers"
 import { getSelectedSkill } from "@/lib/skill-selection"
+import { SelectedSkillBanner } from "@/components/skills/selected-skill-banner"
 
 interface PaperUploadDialogProps {
   open: boolean
@@ -150,6 +151,7 @@ export function PaperUploadDialog({ open, onOpenChange, onUploadComplete }: Pape
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <SelectedSkillBanner />
           {!file ? (
             <div
               onDragEnter={handleDrag}

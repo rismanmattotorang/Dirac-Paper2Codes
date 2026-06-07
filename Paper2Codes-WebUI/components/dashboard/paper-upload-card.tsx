@@ -6,6 +6,7 @@ import { IconUpload, IconFileText, IconLoader, IconFile, IconAlertCircle, IconCh
 import { useRecentPapers } from "@/lib/hooks/use-dashboard"
 import { uploadPaper, processPaper } from "@/lib/api/papers"
 import { getSelectedSkill } from "@/lib/skill-selection"
+import { SelectedSkillBanner } from "@/components/skills/selected-skill-banner"
 import type { Paper } from "@/lib/api/types"
 
 const getPaperStatusLabel = (paper: Paper): string => {
@@ -121,6 +122,11 @@ export function PaperUploadCard() {
         <div className="mb-6">
           <h2 className="text-xl font-bold tracking-tight text-foreground mb-1">Upload Research Paper</h2>
           <p className="text-sm text-muted-foreground">Upload PDF files to begin the code generation process</p>
+        </div>
+
+        {/* Active domain skill */}
+        <div className="mb-4">
+          <SelectedSkillBanner />
         </div>
 
         {/* Upload Area */}
