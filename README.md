@@ -278,6 +278,8 @@ non-critical stages, and turn on SurrealDB for cross-session reuse.
 | [SKILLS.md](SKILLS.md) | Domain Skills: choose, reuse, and improve domain specialisations |
 | [bench/README.md](Paper2Codes-Core/bench/README.md) | Reproducibility benchmark harness |
 | [STRATEGY.md](STRATEGY.md) | Competitive benchmark & superiority roadmap |
+| [TESTING.md](TESTING.md) | Offline + live testing guide |
+| [PRODUCTION_PLAN.md](PRODUCTION_PLAN.md) | Phased path to production |
 | [TODO.md](TODO.md) | Roadmap and open work |
 
 ---
