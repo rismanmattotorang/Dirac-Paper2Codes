@@ -58,6 +58,7 @@
 pub mod agents;
 #[cfg(feature = "api")]
 pub mod api;
+pub mod benchmark;
 pub mod config;
 pub mod coordinator;
 pub mod document;

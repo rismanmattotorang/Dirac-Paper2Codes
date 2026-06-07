@@ -58,6 +58,47 @@ enum Commands {
         #[arg(short, long, default_value = "8080")]
         port: u16,
     },
+    /// Run the reproducibility benchmark harness over a manifest
+    Bench {
+        /// Path to the benchmark manifest (JSON)
+        #[arg(short, long)]
+        manifest: String,
+
+        /// Optional path to write the JSON report
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+}
+
+/// Benchmark generator that runs the full paper→repository pipeline per case.
+struct CliRepoGenerator;
+
+#[async_trait::async_trait]
+impl paper2codes::benchmark::RepoGenerator for CliRepoGenerator {
+    async fn generate(
+        &self,
+        case: &paper2codes::benchmark::BenchmarkCase,
+    ) -> Result<paper2codes::benchmark::GeneratedRepo> {
+        use paper2codes::error::Paper2CodesError;
+
+        let config = Config::load()?;
+        let mut coordinator = Coordinator::new(config).await?;
+        let processor = DocumentProcessor::new();
+
+        let path = &case.paper_path;
+        let mut paper = if path.extension().and_then(|s| s.to_str()) == Some("pdf") {
+            processor.parse_pdf(path).await?
+        } else {
+            let content = std::fs::read_to_string(path).map_err(Paper2CodesError::Io)?;
+            processor.parse_text(&content, None).await?
+        };
+        processor.segment_paper(&mut paper)?;
+
+        let repository = coordinator.process_paper(paper).await?;
+        Ok(paper2codes::benchmark::GeneratedRepo::from_repository(
+            &repository,
+        ))
+    }
 }
 
 #[tokio::main]
@@ -392,6 +433,34 @@ async fn main() -> Result<()> {
                     paper2codes::error::ConfigError::Invalid("API feature not enabled".to_string()),
                 ))
             }
+        }
+        Commands::Bench { manifest, output } => {
+            let manifest_data = paper2codes::benchmark::BenchmarkManifest::load(&manifest)?;
+            println!(
+                "Running benchmark{} over {} case(s)...",
+                manifest_data
+                    .name
+                    .as_ref()
+                    .map(|n| format!(" '{}'", n))
+                    .unwrap_or_default(),
+                manifest_data.cases.len()
+            );
+
+            // Reference-based scoring is fully automated here; reference-free
+            // rubric grading is available via the RubricGrader trait.
+            let generator = CliRepoGenerator;
+            let report =
+                paper2codes::benchmark::run_benchmark(&manifest_data, &generator, None).await;
+
+            println!("\n{}", report.to_markdown());
+
+            if let Some(out) = output {
+                std::fs::write(&out, report.to_json()?)
+                    .map_err(paper2codes::error::Paper2CodesError::Io)?;
+                println!("Report written to {}", out);
+            }
+
+            Ok(())
         }
     }
 }
