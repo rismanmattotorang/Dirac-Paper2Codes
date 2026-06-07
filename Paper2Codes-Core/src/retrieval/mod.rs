@@ -1,7 +1,11 @@
+pub mod bm25;
 pub mod embedding;
+pub mod fusion;
 pub mod vector_store;
 
+pub use bm25::{tokenize, Bm25Index};
 pub use embedding::{EmbeddingProvider, EmbeddingService};
+pub use fusion::{fused_relevance_map, reciprocal_rank_fusion, DEFAULT_RRF_K};
 pub use vector_store::{VectorStore, VectorStoreBuilder};
 
 use crate::error::Result;
@@ -75,23 +79,62 @@ impl DefaultCPREngine {
     }
 
     fn generate_query_keywords(&self, task: &Task) -> Vec<String> {
-        // Extract keywords from task description
-        let text = task.description.to_lowercase();
-        let stop_words: Vec<&str> = vec![
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
-            "by", "from", "as", "is", "was", "are", "were", "be", "been", "being", "have", "has",
-            "had", "do", "does", "did", "will", "would", "should", "could", "may", "might", "must",
-            "can", "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they",
-        ];
+        // Use the shared retrieval tokenizer so the lexical signal is identical
+        // across query-keyword extraction and the BM25 index.
+        bm25::tokenize(&task.description)
+    }
 
-        text.split_whitespace()
-            .filter(|word| {
-                word.len() > 2
-                    && !stop_words.contains(&word)
-                    && word.chars().all(|c| c.is_alphanumeric() || c == '-')
-            })
-            .map(|s| s.to_string())
+    /// Detect structural references (e.g. "Algorithm 1", "Equation (5)",
+    /// "Theorem 2", "Figure 3", "Section 4.2") in the task description.
+    ///
+    /// Research papers use these labels as high-precision anchors, and the
+    /// Dirac-Paper2Codes paper calls out algorithm boxes, theorem statements and
+    /// equation labels as structural retrieval targets. Matching them exactly is
+    /// far more precise than the previous keyword-presence heuristic.
+    fn extract_structural_references(text: &str) -> Vec<String> {
+        use regex::Regex;
+        lazy_static::lazy_static! {
+            static ref REF_RE: Regex = Regex::new(
+                r"(?i)\b(algorithm|equation|eq\.?|theorem|lemma|figure|fig\.?|table|section|sec\.?|definition|proposition|corollary)\s*\.?\s*\(?\s*(\d+(?:\.\d+)*)\)?"
+            ).unwrap();
+        }
+        let normalize_kind = |kind: &str| -> &'static str {
+            match kind.to_lowercase().trim_end_matches('.') {
+                "eq" | "equation" => "equation",
+                "fig" | "figure" => "figure",
+                "sec" | "section" => "section",
+                k if k == "algorithm" => "algorithm",
+                k if k == "theorem" => "theorem",
+                k if k == "lemma" => "lemma",
+                k if k == "table" => "table",
+                k if k == "definition" => "definition",
+                k if k == "proposition" => "proposition",
+                k if k == "corollary" => "corollary",
+                _ => "ref",
+            }
+        };
+        REF_RE
+            .captures_iter(text)
+            .map(|cap| format!("{} {}", normalize_kind(&cap[1]), &cap[2]))
             .collect()
+    }
+
+    /// Boost in `[0, 1]`: 1.0 when the segment names exactly the same structural
+    /// reference(s) the task asks for, else 0.0.
+    fn structural_reference_boost(&self, segment: &PaperSegment, task_refs: &[String]) -> f32 {
+        if task_refs.is_empty() {
+            return 0.0;
+        }
+        let seg_refs = Self::extract_structural_references(&segment.content);
+        if seg_refs.is_empty() {
+            return 0.0;
+        }
+        let hit = task_refs.iter().any(|r| seg_refs.contains(r));
+        if hit {
+            1.0
+        } else {
+            0.0
+        }
     }
 
     fn keyword_overlap(&self, content: &str, keywords: &[String]) -> f32 {
@@ -311,61 +354,87 @@ impl CPREngine for DefaultCPREngine {
         repository: &Repository,
         k: usize,
     ) -> Result<Vec<RetrievedContext>> {
-        // 1. Generate query keywords
+        // 1. Generate query keywords and structural references
         let query_keywords = self.generate_query_keywords(task);
+        let task_refs = Self::extract_structural_references(&task.description);
 
-        // 2. Use vector store for semantic search if available and initialized
-        let semantic_results =
+        // 2a. Dense (semantic) ranking from the vector store, as an ordered list
+        //     of segment ids (best first). Pulled wider than k to give the
+        //     fusion step a healthy candidate pool.
+        let dense_ranking: Vec<String> =
             if self.use_embeddings && self.initialized.load(std::sync::atomic::Ordering::Acquire) {
                 if let (Some(embedding_service), Some(vector_store)) =
                     (&self.embedding_service, &self.vector_store)
                 {
-                    // Generate query embedding
-                    let query_text = task.description.clone();
-                    let query_embedding = embedding_service.embed(&query_text).await?;
-
-                    // Search vector store
+                    let query_embedding = embedding_service.embed(&task.description).await?;
                     let store = vector_store.read().await;
-                    let search_results = store.search(&query_embedding, k * 2).await?; // Get 2x for re-ranking
-
-                    Some(search_results)
+                    store
+                        .search(&query_embedding, (k * 4).max(10))
+                        .await?
+                        .into_iter()
+                        .map(|r| r.id)
+                        .collect()
                 } else {
-                    None
+                    Vec::new()
                 }
             } else {
-                None
+                Vec::new()
             };
 
-        // 3. Score paper segments using hybrid approach
+        // 2b. Sparse (BM25) ranking over the paper segments. This replaces the
+        //     previous substring-containment heuristic with proper lexical
+        //     scoring (tf saturation, IDF, length normalisation).
+        let bm25 = Bm25Index::build(
+            paper
+                .segments
+                .iter()
+                .map(|seg| (seg.id.clone(), seg.content.as_str())),
+        );
+        let sparse_ranking = bm25.ranked_ids(&query_keywords);
+
+        // 2c. Fuse dense + sparse rankings via Reciprocal Rank Fusion. RRF is
+        //     robust to the incompatible score scales of the two retrievers and
+        //     yields a relevance map normalised to [0, 1].
+        let mut rankings: Vec<Vec<String>> = Vec::new();
+        if !dense_ranking.is_empty() {
+            rankings.push(dense_ranking);
+        }
+        if !sparse_ranking.is_empty() {
+            rankings.push(sparse_ranking);
+        }
+        let fused = fusion::fused_relevance_map(&rankings, fusion::DEFAULT_RRF_K);
+
+        // 3. Final per-segment scoring: fused relevance + lexical booster +
+        //    structural-reference boost − already-implemented de-boost.
         let mut scored_segments: Vec<(PaperSegment, f32)> = Vec::new();
 
         for segment in &paper.segments {
-            let mut score = 0.0;
+            // Fused dense+sparse relevance is the primary signal.
+            let base = fused.get(&segment.id).copied().unwrap_or(0.0);
 
-            // Semantic similarity using vector store results
-            if let Some(ref results) = semantic_results {
-                if let Some(result) = results.iter().find(|r| r.id == segment.id) {
-                    score += self.alpha * result.score;
-                }
-            }
-
-            // Keyword overlap (fallback/booster when embeddings not available)
+            // Lightweight lexical booster / tie-breaker.
             let keyword_score = self.keyword_overlap(&segment.content, &query_keywords);
-            score += self.lambda * keyword_score;
 
-            // Boost for algorithm/formula matches (domain-specific signal)
-            if self.is_algorithm_match(segment, task) {
-                score += self.delta;
-            }
+            let mut score = self.alpha * base + self.lambda * keyword_score;
 
-            // De-boost for already implemented (avoid redundant work)
+            // Structural boost: exact reference match (e.g. "Algorithm 1") when
+            // the task names one, otherwise a weaker generic algorithm-content
+            // boost.
+            let structural = if !task_refs.is_empty() {
+                self.structural_reference_boost(segment, &task_refs)
+            } else if self.is_algorithm_match(segment, task) {
+                0.5
+            } else {
+                0.0
+            };
+            score += self.delta * structural;
+
+            // De-boost for already implemented (avoid redundant work).
             if self.is_already_implemented(segment, repository) {
                 score -= self.gamma;
             }
 
-            // Normalize score to [0, 1] range for better interpretability
             score = score.max(0.0).min(1.0);
-
             scored_segments.push((segment.clone(), score));
         }
 

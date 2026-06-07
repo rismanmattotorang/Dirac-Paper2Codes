@@ -203,7 +203,7 @@ Generated 8 modules in ./generated_code/  ·  Total time: 89.2s
 
 ### Core algorithms
 
-1. **Contextual Paper Retrieval (CPR)** — hybrid scoring combining semantic similarity, keyword matching, algorithm boosting, and implementation de-boosting.
+1. **Contextual Paper Retrieval (CPR)** — hybrid retrieval fusing dense embeddings and Okapi **BM25** via **Reciprocal Rank Fusion**, with exact structural-reference boosting ("Algorithm 1", "Equation (5)"), MMR diversity, and implementation-state de-boosting. See [STRATEGY.md](STRATEGY.md) for the retrieval roadmap.
 2. **Multi-Agent Orchestration** — dependency-resolved task graph with parallel execution and convergence detection.
 3. **Symbolically-Augmented Code Verification (SACV)** — a three-phase pipeline: static → dynamic → symbolic.
 
@@ -298,6 +298,8 @@ Paper2Codes has been through comprehensive review and hardening:
 - [x] HTTP/WebSocket API server
 - [x] Web control plane (Next.js)
 - [x] Live LLM provider & key management
+- [x] Hybrid retrieval v2 (BM25 + Reciprocal Rank Fusion + structural reranking)
+- [ ] Query transformation (HyDE) + cross-encoder/LLM reranking
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
 - [ ] Multi-paper synthesis
