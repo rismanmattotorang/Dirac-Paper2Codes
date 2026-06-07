@@ -91,13 +91,22 @@ testable. Closes gap #3.
   the `Coordinator` and isolated behind the `QueryExpander` / `Reranker` traits
   so the deterministic pieces are unit-tested and the LLM calls are mockable.
 
-### Phase 4 — Corrective retrieval + code-gen quality
-- **CRAG / Self-RAG**: a lightweight retrieval-quality grader that triggers query
-  rewriting or web/reference expansion when confidence is low.
-- **Self-consistency**: sample *N* candidate implementations per coding task,
-  select by SACV pass-rate + LLM-judge, breaking ties by agreement.
-- **Self-debugging loop**: feed structured SACV/exec feedback back to the coder
-  with rubber-duck-style explanations (Chen et al., 2023), capped iterations.
+### Phase 4 — Corrective retrieval + code-gen quality  ✅ *shipped in this PR*
+- **CRAG corrective retrieval** (`retrieval/crag.rs`): grades retrieval
+  confidence from the top relevance scores and, when weak, performs deterministic
+  knowledge expansion — widening the selected context (`Ambiguous → k+⌈k/2⌉`,
+  `Incorrect → 2k`) instead of returning a thin, possibly-wrong top-k. Wired into
+  `DefaultCPREngine::retrieve`.
+- **Self-consistency selection** (`evaluation/self_consistency.rs`): a
+  deterministic best-of-N policy (verification pass → pass-rate → judge score →
+  majority agreement → stable index) plus `best_of_n`, an async driver over a
+  mockable `CandidateGenerator`. Verifier-guided selection lifts correctness over
+  single-sample generation.
+- **Self-debugging repair** (`agents/repair.rs`): groups a module's verification
+  issues into one severity-prioritised, rubber-duck-style repair brief
+  (Chen et al., 2023) with a capped-iteration policy; wired into the
+  coordinator's `handle_verification_feedback` (one structured fix task per
+  module instead of one per symptom).
 
 ### Phase 5 — Reproducibility benchmark harness
 - A `bench/` harness over a curated paper→repo set (PaperBench-style), scoring

@@ -300,7 +300,8 @@ Paper2Codes has been through comprehensive review and hardening:
 - [x] Live LLM provider & key management
 - [x] Hybrid retrieval v2 (BM25 + Reciprocal Rank Fusion + structural reranking)
 - [x] Query transformation (HyDE) + LLM reranking
-- [ ] Corrective retrieval (CRAG/Self-RAG) + self-consistency code generation
+- [x] Corrective retrieval (CRAG) + self-consistency + self-debugging repair
+- [ ] Reproducibility benchmark harness (PaperBench-style)
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
 - [ ] Multi-paper synthesis

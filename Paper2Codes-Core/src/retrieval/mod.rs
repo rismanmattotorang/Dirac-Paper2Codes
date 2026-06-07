@@ -1,5 +1,6 @@
 pub mod augment;
 pub mod bm25;
+pub mod crag;
 pub mod embedding;
 pub mod fusion;
 pub mod vector_store;
@@ -8,6 +9,7 @@ pub use augment::{
     combine_embeddings, parse_rerank_order, LlmQueryExpander, LlmReranker, QueryExpander, Reranker,
 };
 pub use bm25::{tokenize, Bm25Index};
+pub use crag::{CragThresholds, RetrievalGrade};
 pub use embedding::{EmbeddingProvider, EmbeddingService};
 pub use fusion::{fused_relevance_map, reciprocal_rank_fusion, DEFAULT_RRF_K};
 pub use vector_store::{VectorStore, VectorStoreBuilder};
@@ -48,6 +50,9 @@ pub struct DefaultCPREngine {
     /// Weight of the original-query embedding when blending with the HyDE
     /// hypothetical-document embedding (1.0 = ignore HyDE, 0.0 = HyDE only).
     hyde_alpha: f32,
+    /// Corrective-retrieval (CRAG) knowledge expansion on low confidence.
+    crag_enabled: bool,
+    crag_thresholds: crag::CragThresholds,
 }
 
 impl DefaultCPREngine {
@@ -65,7 +70,15 @@ impl DefaultCPREngine {
             query_expander: None,
             reranker: None,
             hyde_alpha: 0.5,
+            crag_enabled: true,
+            crag_thresholds: crag::CragThresholds::default(),
         }
+    }
+
+    /// Enable or disable CRAG corrective knowledge expansion (default on).
+    pub fn with_crag(mut self, enabled: bool) -> Self {
+        self.crag_enabled = enabled;
+        self
     }
 
     /// Attach a HyDE query expander (Phase 3). Only active when an embedding
@@ -543,9 +556,30 @@ impl CPREngine for DefaultCPREngine {
             }
         }
 
+        // 4c. CRAG corrective expansion: grade retrieval confidence from the top
+        //     scores; when weak, widen selection so the agent gets more candidate
+        //     context instead of a thin, possibly-wrong top-k.
+        let effective_k = if self.crag_enabled {
+            let top_scores: Vec<f32> = scored_segments.iter().take(5).map(|(_, s)| *s).collect();
+            let grade = crag::grade(&top_scores, &self.crag_thresholds);
+            let expanded = crag::expanded_k(k, grade);
+            if grade != crag::RetrievalGrade::Correct {
+                tracing::debug!(
+                    "CRAG: retrieval graded {:?}; expanding selection {} -> {}",
+                    grade,
+                    k,
+                    expanded
+                );
+            }
+            expanded
+        } else {
+            k
+        };
+
         // Apply diversity filtering to avoid redundant segments
-        let mut contexts: Vec<RetrievedContext> = Self::select_diverse_segments(scored_segments, k)
-            .into_iter()
+        let mut contexts: Vec<RetrievedContext> =
+            Self::select_diverse_segments(scored_segments, effective_k)
+                .into_iter()
             .map(|(seg, score)| {
                 let reason = if score > 0.7 {
                     "Highly relevant (semantic match)".to_string()
