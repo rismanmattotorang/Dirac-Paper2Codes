@@ -108,10 +108,16 @@ testable. Closes gap #3.
   coordinator's `handle_verification_feedback` (one structured fix task per
   module instead of one per symptom).
 
-### Phase 5 — Reproducibility benchmark harness
-- A `bench/` harness over a curated paper→repo set (PaperBench-style), scoring
-  generated repos against author references (reference-based) and with an
-  LLM-judge rubric (reference-free). Makes "superior" measurable and regression-safe.
+### Phase 5 — Reproducibility benchmark harness  ✅ *shipped in this PR*
+- `benchmark/` module + `bench/` manifest dir + a `paper2codes bench` CLI
+  subcommand. Runs a curated paper→repo set (PaperBench-style) and scores
+  generated repos two ways:
+  - **reference-based** (`scoring::reference_score`): file precision/recall/F1 by
+    normalised filename + token-Jaccard content similarity over matched files;
+  - **reference-free**: optional LLM-judge rubric via the `RubricGrader` trait.
+- Results aggregate into a `BenchmarkReport` (Markdown + JSON). `RepoGenerator` /
+  `RubricGrader` are traits, so the runner is unit-tested with mocks while the
+  CLI wraps the real coordinator. Makes "superior" measurable and regression-safe.
 
 ### Phase 6 — Graph-native retrieval (leverage SurrealDB)
 - **GraphRAG over the dependency graph**: use SurrealDB's graph edges

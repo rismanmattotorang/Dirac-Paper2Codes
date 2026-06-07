@@ -273,6 +273,8 @@ non-critical stages, and turn on SurrealDB for cross-session reuse.
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment (Docker, K8s, monitoring) |
 | [LLM_API_KEY.md](LLM_API_KEY.md) | LLM provider & API key management |
 | [Paper2Codes-Core/config.example.toml](Paper2Codes-Core/config.example.toml) | Full configuration reference |
+| [bench/README.md](Paper2Codes-Core/bench/README.md) | Reproducibility benchmark harness |
+| [STRATEGY.md](STRATEGY.md) | Competitive benchmark & superiority roadmap |
 | [TODO.md](TODO.md) | Roadmap and open work |
 
 ---
@@ -301,7 +303,8 @@ Paper2Codes has been through comprehensive review and hardening:
 - [x] Hybrid retrieval v2 (BM25 + Reciprocal Rank Fusion + structural reranking)
 - [x] Query transformation (HyDE) + LLM reranking
 - [x] Corrective retrieval (CRAG) + self-consistency + self-debugging repair
-- [ ] Reproducibility benchmark harness (PaperBench-style)
+- [x] Reproducibility benchmark harness (`paper2codes bench`)
+- [ ] Graph-native retrieval over SurrealDB dependency graph
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
 - [ ] Multi-paper synthesis

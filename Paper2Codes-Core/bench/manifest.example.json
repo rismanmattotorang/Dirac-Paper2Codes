@@ -1,0 +1,16 @@
+{
+  "name": "dirac-paper2codes-smoke",
+  "cases": [
+    {
+      "id": "attention-is-all-you-need",
+      "paper_path": "papers/attention.txt",
+      "reference_repo": "refs/attention"
+    },
+    {
+      "id": "resnet",
+      "paper_path": "papers/resnet.pdf",
+      "reference_repo": "refs/resnet",
+      "rubric_path": "rubrics/resnet.json"
+    }
+  ]
+}
