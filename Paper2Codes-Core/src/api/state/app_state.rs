@@ -7,16 +7,48 @@ use crate::api::websocket::manager::ConnectionManager;
 use crate::config::Config;
 use crate::storage::errors::StorageError;
 use crate::storage::StorageManager;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(feature = "api")]
 use std::time::Duration;
 use tokio::sync::RwLock;
 
+/// Runtime LLM overrides layered on top of the immutable bootstrap [`Config`].
+///
+/// The bootstrap config is loaded once at startup and shared as `Arc<Config>`,
+/// so it cannot be mutated in place without an expensive lock on every reader.
+/// Instead, mutable LLM settings (API keys and the default provider) are kept
+/// here behind a single lock and merged on demand via
+/// [`AppState::effective_config`]. This lets the Web UI change keys and have
+/// them take effect immediately for in-process consumers (e.g. the SSE LLM
+/// endpoint) while also being persisted to disk for worker restarts.
+#[derive(Debug, Default, Clone)]
+pub struct LlmOverrides {
+    /// provider id -> overridden key. `Some` sets/replaces a key, `None`
+    /// explicitly clears a key that was present in the bootstrap config.
+    pub api_keys: HashMap<String, Option<String>>,
+    /// Overridden default provider id.
+    pub default_provider: Option<String>,
+}
+
+/// Absolute path of the persisted config file (`<config-dir>/paper2codes/config.toml`).
+pub fn config_file_path() -> crate::error::Result<PathBuf> {
+    let dir = dirs::config_dir().ok_or_else(|| {
+        crate::error::Paper2CodesError::Config(crate::error::ConfigError::NotFound(
+            "config directory".to_string(),
+        ))
+    })?;
+    Ok(dir.join("paper2codes").join("config.toml"))
+}
+
 /// Shared application state accessible to all request handlers
 #[derive(Clone)]
 pub struct AppState {
-    /// Application configuration
+    /// Immutable bootstrap configuration loaded at startup.
     pub config: Arc<Config>,
+    /// Mutable LLM overrides (API keys / default provider) applied at runtime.
+    pub llm_overrides: Arc<RwLock<LlmOverrides>>,
     /// Storage manager for database operations
     pub storage: Arc<RwLock<Option<StorageManager>>>,
     /// JWT service for authentication
@@ -96,6 +128,7 @@ impl AppState {
 
         Ok(Self {
             config: Arc::new(config),
+            llm_overrides: Arc::new(RwLock::new(LlmOverrides::default())),
             storage: Arc::new(RwLock::new(storage)),
             #[cfg(feature = "api")]
             jwt_service,
@@ -104,6 +137,114 @@ impl AppState {
             #[cfg(feature = "api")]
             cache,
         })
+    }
+
+    /// Produce the effective configuration: the bootstrap config with the
+    /// current runtime LLM overrides merged in.
+    ///
+    /// This is the config that should be used whenever an `LLMRouter` is built
+    /// at request time so that key changes made through the Web UI take effect
+    /// without a process restart.
+    pub async fn effective_config(&self) -> Config {
+        let mut config = (*self.config).clone();
+        let overrides = self.llm_overrides.read().await;
+
+        if let Some(provider) = &overrides.default_provider {
+            config.llm.default_provider = provider.clone();
+        }
+
+        for (name, key) in &overrides.api_keys {
+            match key {
+                Some(value) => {
+                    let entry = config
+                        .llm
+                        .providers
+                        .entry(name.clone())
+                        .or_insert_with(|| crate::config::ProviderConfig::for_provider(name));
+                    entry.api_key = Some(value.clone());
+                    entry.enabled = true;
+                }
+                None => {
+                    if let Some(entry) = config.llm.providers.get_mut(name) {
+                        entry.api_key = None;
+                        entry.enabled = false;
+                    }
+                }
+            }
+        }
+
+        config
+    }
+
+    /// Set or replace the API key for a provider and persist the change.
+    pub async fn set_llm_api_key(&self, provider: &str, key: String) -> crate::error::Result<()> {
+        self.llm_overrides
+            .write()
+            .await
+            .api_keys
+            .insert(provider.to_string(), Some(key));
+        self.persist_effective_config().await.map(|_| ())
+    }
+
+    /// Clear the API key for a provider and persist the change.
+    pub async fn remove_llm_api_key(&self, provider: &str) -> crate::error::Result<()> {
+        self.llm_overrides
+            .write()
+            .await
+            .api_keys
+            .insert(provider.to_string(), None);
+        self.persist_effective_config().await.map(|_| ())
+    }
+
+    /// Set the default LLM provider and persist the change.
+    pub async fn set_default_llm_provider(&self, provider: String) -> crate::error::Result<()> {
+        self.llm_overrides.write().await.default_provider = Some(provider);
+        self.persist_effective_config().await.map(|_| ())
+    }
+
+    /// Serialise the effective configuration to the on-disk config file.
+    ///
+    /// On Unix the file is written with `0600` permissions because it can
+    /// contain plaintext API keys.
+    pub async fn persist_effective_config(&self) -> crate::error::Result<PathBuf> {
+        let config = self.effective_config().await;
+        let path = config_file_path()?;
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                crate::error::Paper2CodesError::Config(crate::error::ConfigError::Invalid(format!(
+                    "Failed to create config directory: {}",
+                    e
+                )))
+            })?;
+        }
+
+        let toml_content = toml::to_string_pretty(&config).map_err(|e| {
+            crate::error::Paper2CodesError::Config(crate::error::ConfigError::Invalid(format!(
+                "Failed to serialize config: {}",
+                e
+            )))
+        })?;
+
+        std::fs::write(&path, toml_content).map_err(|e| {
+            crate::error::Paper2CodesError::Config(crate::error::ConfigError::Invalid(format!(
+                "Failed to write config file: {}",
+                e
+            )))
+        })?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) =
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            {
+                tracing::warn!("Failed to tighten permissions on {}: {}", path.display(), e);
+            }
+        }
+
+        tracing::info!("Configuration persisted to {}", path.display());
+        Ok(path)
     }
 
     /// Get reference to storage manager for operations

@@ -1,404 +1,246 @@
-# Paper2Codes: Neuro-Symbolic RAG Framework for Automated Code Generation
-
 <div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<h1>Paper2Codes</h1>
+
+### From paper to production — automatically.
+
+**by [Dirac Technologies](#about-dirac-technologies)**
+
+Paper2Codes turns scientific papers into verified, runnable code. Upload a PDF,
+get a working repository — planned, written, and checked by a team of
+specialized AI agents grounded in neuro-symbolic retrieval.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Frontend](https://img.shields.io/badge/web-Next.js-black.svg)](https://nextjs.org)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/status-production%20ready-blue.svg)]()
 
-*Transform scientific papers into production-ready code automatically*
-
-[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Architecture](#architecture) • [Documentation](#documentation) • [Contributing](#contributing)
+[**Why Paper2Codes**](#why-paper2codes) ·
+[**How it works**](#how-it-works) ·
+[**Quickstart**](#quickstart) ·
+[**Architecture**](#architecture) ·
+[**Docs**](#documentation)
 
 </div>
 
 ---
 
-## Overview
+## The problem
 
-Paper2Codes is a production-ready neuro-symbolic Retrieval-Augmented Generation (RAG) framework that automatically generates executable code and documentation from scientific literature. Leveraging state-of-the-art LLMs, advanced retrieval algorithms, and symbolic verification, Paper2Codes transforms research papers into production-ready implementations.
+Reproducing a research paper is slow, manual, and error-prone. A single method
+section can hide days of work: deciphering notation, reconstructing algorithms,
+wiring up modules, and debugging the gap between math and code. Most papers are
+never reproduced at all.
 
-### Project Structure
+## The product
 
-Paper2Codes consists of two main components:
+**Paper2Codes is the reproduction layer for research.** Point it at a paper and
+it delivers a structured, verified codebase — not a single hallucinated file,
+but a planned repository with modules, dependencies, and tests.
 
-- **Paper2Codes-Core** (Rust): The core backend library providing paper processing, code generation, and verification capabilities. Includes both TUI interface and HTTP/WebSocket API server for integration with the WebUI.
-- **Paper2Codes-WebUI** (Next.js + Deno Tooling): A modern web interface built with Next.js that communicates with the Core backend via REST API and WebSocket for real-time updates.
+It is built on a **neuro-symbolic Retrieval-Augmented Generation (RAG)** engine:
+large language models for reasoning and generation, symbolic methods for
+verification, and a purpose-built retrieval layer that keeps generation grounded
+in the source paper.
 
-See [STRUCTURE.md](STRUCTURE.md) for detailed structure documentation. For comprehensive integration details, see [INTEGRATION.md](INTEGRATION.md).
+```
+   paper.pdf  ──▶  Paper2Codes  ──▶  ./generated_code/
+                                      ├── attention_mechanism.py   ✓ verified
+                                      ├── transformer_block.py     ✓ verified
+                                      ├── positional_encoding.py   ✓ verified
+                                      └── ...                      8 modules · 89s
+```
 
-### Key Innovations
+---
 
-- **Advanced RAG**: Contextual Paper Retrieval (CPR) with hybrid semantic+keyword scoring
-- **Multi-Agent Architecture**: Specialized agents for planning, analysis, coding, and verification
-- **Symbolically-Augmented Verification**: Multi-layered code verification (static, dynamic, symbolic)
-- **Production-Ready**: Comprehensive error handling, caching, parallel execution
-- **Persistent Storage**: SurrealDB integration with graph-based dependency tracking
+## Why Paper2Codes
+
+| | |
+|---|---|
+| 🧠 **Grounded, not guessed** | Contextual Paper Retrieval (CPR) keeps every generation anchored to the source text with hybrid semantic + keyword scoring. |
+| 🤝 **A team, not a prompt** | Specialized agents for planning, analysis, coding, and verification run in parallel with dependency-aware orchestration. |
+| ✅ **Verified by construction** | A three-phase SACV pipeline checks output statically, dynamically, and symbolically — so "generated" means "checked." |
+| 🔌 **Bring your own model** | First-class support for OpenAI, Anthropic, OpenRouter, and xAI, switchable live from the web UI with no restart. |
+| ⚡ **Fast and frugal** | Parallel execution, adaptive concurrency, HTTP/2 pooling, and multi-level caching of embeddings and LLM responses. |
+| 🦀 **Built to last** | A Rust core for compile-time guarantees and predictable performance, with a modern Next.js control plane. |
+
+---
+
+## How it works
+
+Paper2Codes ships as two cooperating components:
+
+- **Paper2Codes-Core** *(Rust)* — the engine. Paper parsing, retrieval, the
+  multi-agent coordinator, verification, persistent storage, and both a rich
+  terminal UI and an HTTP/WebSocket API.
+- **Paper2Codes-WebUI** *(Next.js)* — the control plane. A real-time dashboard
+  for uploading papers, watching agents work, browsing generated code, and
+  managing provider keys and settings.
+
+```
+              Upload ──▶ Plan ──▶ Analyze ──▶ Generate ──▶ Verify ──▶ Repository
+                          │         │            │            │
+                       planning  analysis      coding     verification
+                        agent      agent        agent        agent
+                          └──────────┴─────┬──────┴────────────┘
+                                  Coordinator (parallel, dependency-aware)
+                                           │
+                              Neuro-symbolic RAG + SurrealDB
+```
 
 ---
 
 ## Features
 
-### 🚀 Core Capabilities
+### Engine
+- **Intelligent paper processing** — parse PDFs and text; extract algorithms, equations, and structure.
+- **Automatic domain classification** — detect the paper's field to optimize generation.
+- **Multi-agent orchestration** — parallel execution with semaphore-based concurrency, dependency resolution, and convergence detection.
+- **Advanced retrieval** — embedding-backed vector search (OpenAI, Voyage AI) with hybrid CPR scoring.
+- **SACV verification** — static analysis, dynamic testing, and symbolic reasoning in one pipeline.
+- **Persistent storage** — SurrealDB with native vector search and graph-based dependency tracking.
 
-- **Intelligent Paper Processing**: Parse PDFs and text, extract algorithms, equations, and structure
-- **Domain Classification**: Automatic detection of paper domain for optimized code generation
-- **Multi-Agent Orchestration**: Parallel execution with resource control and convergence detection
-- **Advanced Retrieval**: State-of-the-art embedding models (OpenAI, Voyage AI) with vector search
-- **LLM Integration**: Support for OpenAI, Anthropic Claude, xAI Grok via OpenRouter
-- **Code Verification**: Comprehensive SACV pipeline with static analysis, dynamic testing, and symbolic reasoning
-- **Interactive TUI**: Rich terminal user interface powered by Ratatui
-- **Persistent Storage**: SurrealDB with native vector search and graph capabilities
-
-### 💡 Technical Highlights
-
-- **Performance**: Parallel task execution with semaphore-based concurrency control
-- **Caching**: Multi-level caching (embeddings, LLM responses) for cost optimization
-- **Error Recovery**: Automatic retry with exponential backoff and graceful degradation
-- **Type Safety**: Full Rust type system leveraging for compile-time guarantees
-- **Modularity**: Clean trait-based architecture for extensibility
-- **API Integration**: RESTful API and WebSocket support for real-time communication
-- **Dual Interface**: Both TUI (terminal) and WebUI (browser) interfaces available
+### Platform
+- **Live LLM key management** — set, test, rotate, and remove provider keys per provider from the web UI; changes take effect immediately and are stored server-side (never exposed in full). See [LLM_API_KEY.md](LLM_API_KEY.md).
+- **Dual interface** — a browser control plane *and* a fully interactive terminal UI (Ratatui).
+- **Real-time updates** — REST + WebSocket streaming of task progress and logs.
+- **Production hardening** — JWT auth, rate limiting, input validation, structured logging, and Prometheus metrics.
+- **Resilience** — automatic retry with exponential backoff and graceful degradation.
 
 ---
 
-## Installation
+## Quickstart
 
 ### Prerequisites
+- **Rust** 1.70+ — [install](https://www.rust-lang.org/tools/install)
+- **Node.js** 18+ (for the web UI) — [install](https://nodejs.org/)
+- **SurrealDB** (optional, for persistence) — [install](https://surrealdb.com/docs/installation)
+- An API key for at least one LLM provider (OpenAI, Anthropic, OpenRouter, or xAI)
 
-**For Core (Rust):**
-- Rust 1.70+ ([Install Rust](https://www.rust-lang.org/tools/install))
-- SurrealDB (optional, for persistent storage) ([Install SurrealDB](https://surrealdb.com/docs/installation))
-- API Keys for LLM providers (OpenAI, Anthropic, or OpenRouter)
-
-**For WebUI (Deno + Next.js):**
-- Deno 1.40+ ([Install Deno](https://deno.land/manual/getting_started/installation))
-- Node.js 18+ (required for Next.js runtime) ([Install Node.js](https://nodejs.org/))
-
-### Production Deployment
-
-#### Core (Rust Backend)
-
-1. **Build optimized release binary**:
-   ```bash
-   cd Paper2Codes-Core
-   cargo build --release
-   ```
-
-2. **Set up configuration**:
-   ```bash
-   mkdir -p ~/.config/paper2codes
-   cp Paper2Codes-Core/config.example.toml ~/.config/paper2codes/config.toml
-   # Edit config.toml with your API keys and settings
-   ```
-
-3. **Set environment variables** (recommended for API keys):
-   ```bash
-   export OPENROUTER_API_KEY="sk-or-v1-..."
-   # Or for other providers:
-   export OPENAI_API_KEY="sk-..."
-   export ANTHROPIC_API_KEY="sk-ant-..."
-   ```
-
-4. **Start SurrealDB** (if using persistent storage):
-   ```bash
-   surreal start --log trace --user root --pass root memory
-   # Or for file-based storage:
-   surreal start --log trace --user root --pass root file://./data/surrealdb
-   ```
-
-5. **Run health check**:
-   ```bash
-   ./Paper2Codes-Core/target/release/paper2codes health
-   ```
-
-#### WebUI (Frontend)
-
-1. **Install dependencies and build**:
-   ```bash
-   cd Paper2Codes-WebUI
-   npm install
-   npm run build
-   ```
-
-2. **Start production server**:
-   ```bash
-   npm start
-   ```
-
-3. **Development mode**:
-   ```bash
-   npm run dev
-   ```
-
-**Note**: Next.js requires Node.js runtime. Deno is used for code quality tooling (linting, formatting) - see `Paper2Codes-WebUI/README.md` for details.
-
-### From Source
+### 1. Run the engine
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/Paper2Codes.git
-cd Paper2Codes
-
-# Build Core with optimizations
 cd Paper2Codes-Core
 cargo build --release
 
-# Run Core CLI
-./target/release/paper2codes --help
+# Configure (API keys can also be added later from the web UI)
+mkdir -p ~/.config/paper2codes
+cp config.example.toml ~/.config/paper2codes/config.toml
 
-# Setup and run WebUI
-cd ../Paper2Codes-WebUI
-deno task dev  # Development mode
-# Or: npm install && npm run dev
+# Or provide keys via environment variables
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Verify your setup
+./target/release/paper2codes health
 ```
 
-### Using Cargo
+### 2. Launch the control plane
 
 ```bash
-cargo install --path .
-# Or from crates.io (when published):
-# cargo install paper2codes
+cd Paper2Codes-WebUI
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-### Production Build
+Open the web UI, go to **Settings → LLM Configuration**, and paste in your
+provider keys — they're validated live and applied without a restart.
 
-For production use, build with optimizations:
+### 3. Generate code from a paper
+
+**From the CLI:**
 
 ```bash
-cargo build --release
-# Binary will be at: ./target/release/paper2codes
-```
-
----
-
-## Quick Start
-
-### 1. Configure API Keys
-
-Create a `config.toml` in `~/.config/paper2codes/` or use environment variables:
-
-```toml
-[llm]
-openrouter_api_key = "sk-or-v1-..."  # or set OPENROUTER_API_KEY env var
-default_provider = "openrouter"
-
-[llm.providers.openrouter]
-enabled = true
-base_url = "https://openrouter.ai/api/v1"
-models = ["openai/gpt-4-turbo", "anthropic/claude-3-opus-20240229"]
-
-[agents]
-planning_model = "openai/gpt-4-turbo"
-analysis_model = "anthropic/claude-3-opus-20240229"
-coding_model = "openai/gpt-4-turbo"
-verification_model = "anthropic/claude-3-opus-20240229"
-max_iterations = 10
-parallel_tasks = 4
-
-[storage]
-enabled = true
-connection_string = "ws://localhost:8000"
-namespace = "paper2codes"
-database = "main"
-username = "root"
-password = "root"
-auto_migrate = true
-```
-
-See [config.example.toml](config.example.toml) for full configuration options.
-
-### 2. Process a Paper
-
-#### Command-Line Interface
-
-```bash
-# Process a PDF paper
 paper2codes process --paper path/to/paper.pdf --output ./generated_code
-
-# Process text format
-paper2codes process --paper path/to/paper.txt --output ./generated_code
-
-# With verbose logging
-paper2codes process --paper paper.pdf --output ./output --verbose
 ```
 
-#### Interactive TUI
+**From the terminal UI:**
 
 ```bash
-# Launch interactive interface
-paper2codes tui
-
-# With pre-loaded paper
 paper2codes tui --paper path/to/paper.pdf
 ```
 
-### 3. Example Output
+**Example run:**
 
 ```
 Processing paper: "Attention Is All You Need"
 - Domain: Machine Learning / Deep Learning
 - Modules identified: 8
   ✓ Planning completed (12.3s)
-  ✓ Analysis completed (8 modules analyzed in 24.5s)
-  ✓ Code generation (parallel execution)
-    - attention_mechanism.py (4.2s)
-    - transformer_block.py (5.1s)
-    - positional_encoding.py (3.8s)
-    - multi_head_attention.py (6.3s)
-    - feed_forward.py (2.9s)
-    - encoder.py (5.7s)
-    - decoder.py (6.4s)
-    - transformer.py (7.8s)
-  ✓ Verification completed (PASSED with 2 warnings)
+  ✓ Analysis completed (8 modules in 24.5s)
+  ✓ Code generation (parallel)
+  ✓ Verification PASSED (2 warnings)
 
-Generated 8 modules in ./generated_code/
-Total time: 89.2s
+Generated 8 modules in ./generated_code/  ·  Total time: 89.2s
 ```
 
 ---
 
 ## Architecture
 
-Paper2Codes uses a sophisticated multi-layered architecture supporting both TUI and WebUI interfaces:
-
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Paper2Codes-WebUI                        │
-│                    (Next.js + Deno Tooling)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │   Dashboard  │  │   Papers     │  │    Tasks     │         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
+│                       Paper2Codes-WebUI                          │
+│                          (Next.js)                               │
+│   ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────┐  │
+│   │ Dashboard  │   │   Papers   │   │   Tasks    │   │Settings│  │
+│   └────────────┘   └────────────┘   └────────────┘   └────────┘  │
 └──────────────────────────────┬──────────────────────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   HTTP/REST API     │
-                    │   WebSocket API     │
-                    └──────────┬──────────┘
-                               │
+                               │  REST + WebSocket
 ┌──────────────────────────────▼──────────────────────────────────┐
-│                    Paper2Codes-Core                             │
-│                    (Rust Backend)                               │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              API Server Layer (axum/warp)                │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐        │  │
-│  │  │   REST     │  │ WebSocket  │  │   Auth     │        │  │
-│  │  │  Handlers  │  │  Handlers  │  │  Middleware│        │  │
-│  │  └────────────┘  └────────────┘  └────────────┘        │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Business Logic Layer                         │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐        │  │
-│  │  │Coordinator │  │   Agents   │  │ Retrieval  │        │  │
-│  │  └────────────┘  └────────────┘  └────────────┘        │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Storage & External Services                  │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐        │  │
-│  │  │ SurrealDB  │  │  LLM APIs  │  │   Docker   │        │  │
-│  │  └────────────┘  └────────────┘  └────────────┘        │  │
-│  └──────────────────────────────────────────────────────────┘  │
+│                       Paper2Codes-Core (Rust)                    │
+│   API layer        REST · WebSocket · Auth · Rate limiting       │
+│   Business logic   Coordinator · Agents · Retrieval · Verify     │
+│   Foundations      SurrealDB · LLM providers · Sandbox (Docker)  │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                    ┌──────────▼──────────┐
-                    │   TUI Interface     │
-                    │   (ratatui)         │
-                    │   (Optional Mode)   │
-                    └─────────────────────┘
+                       ┌───────▼────────┐
+                       │  Terminal UI   │
+                       │   (Ratatui)    │
+                       └────────────────┘
 ```
 
-For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md). For comprehensive integration details including API specifications, see [INTEGRATION.md](INTEGRATION.md).
+### Core algorithms
 
-### Key Algorithms
+1. **Contextual Paper Retrieval (CPR)** — hybrid scoring combining semantic similarity, keyword matching, algorithm boosting, and implementation de-boosting.
+2. **Multi-Agent Orchestration** — dependency-resolved task graph with parallel execution and convergence detection.
+3. **Symbolically-Augmented Code Verification (SACV)** — a three-phase pipeline: static → dynamic → symbolic.
 
-1. **Contextual Paper Retrieval (CPR)**: Hybrid scoring with semantic similarity, keyword matching, algorithm boosting, and implementation de-boosting
-
-2. **Multi-Agent Orchestration**: Task dependency resolution with parallel execution and convergence detection
-
-3. **Symbolically-Augmented Code Verification (SACV)**: Three-phase verification pipeline (static → dynamic → symbolic)
-
-For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
+Deep dives live in [ARCHITECTURE.md](ARCHITECTURE.md) and [SPECS.md](SPECS.md).
 
 ---
 
-## Documentation
+## Build for production
 
-### Core Documentation
+```bash
+# Engine (optimized binary at ./target/release/paper2codes)
+cd Paper2Codes-Core && cargo build --release
 
-- [Architecture Guide](ARCHITECTURE.md) - System design and component details
-- [Specifications](SPECS.md) - Technical specifications and implementation details
-- [Integration Plan](INTEGRATION.md) - Comprehensive integration plan for Core and WebUI
-- [Project Structure](STRUCTURE.md) - Project structure and organization
-- [API Documentation](https://docs.rs/paper2codes) - Rust API docs (when published)
+# Control plane
+cd Paper2Codes-WebUI && npm install && npm run build && npm start
+```
 
-### Examples
-
-See the [examples/](examples/) directory for:
-
-- Basic usage examples
-- Custom agent implementations
-- Integration with external tools
-- Advanced configuration
-
-### Configuration
-
-Full configuration reference available in [config.example.toml](config.example.toml).
-
-Key configuration sections:
-
-- **LLM**: Provider selection, API keys, model routing
-- **Agents**: Model assignments, iteration limits, parallelism
-- **Verification**: Enable/disable verification phases
-- **Storage**: SurrealDB connection and schema settings
-- **Execution**: Sandbox configuration and timeouts
+Full deployment instructions — Docker Compose, Kubernetes, and monitoring — are
+in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
-## Advanced Usage
-
-### Custom Agent Implementation
-
-```rust
-use paper2codes::agents::{Agent, AgentContext, AgentResponse};
-use async_trait::async_trait;
-
-#[derive(Clone)]
-struct CustomAgent {
-    // Your agent state
-}
-
-#[async_trait]
-impl Agent for CustomAgent {
-    async fn execute(&self, task: &Task, context: &AgentContext) -> Result<AgentResponse> {
-        // Your implementation
-    }
-    
-    fn agent_type(&self) -> AgentType {
-        AgentType::Custom("my_agent".to_string())
-    }
-}
-```
-
-### Integrating with Existing Tools
+## Use it as a library
 
 ```rust
 use paper2codes::coordinator::Coordinator;
 use paper2codes::config::Config;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
     let mut coordinator = Coordinator::new(config).await?;
-    
-    // Process paper
-    let paper = /* load paper */;
+
     let repository = coordinator.process_paper(paper).await?;
-    
-    // Access generated code
     for module in &repository.modules {
         println!("Generated: {}", module.file_path.display());
     }
-    
     Ok(())
 }
 ```
@@ -407,156 +249,55 @@ async fn main() -> Result<()> {
 
 ## Performance
 
-### Benchmarks
+Typical machine-learning paper (10–15 pages):
 
-On a typical machine learning paper (10-15 pages):
+| Stage | Time |
+|---|---|
+| Planning | ~10–20s |
+| Analysis (8–12 modules) | ~20–30s |
+| Code generation (parallel) | ~40–60s |
+| Verification | ~10–20s |
+| **Total** | **~90–120s** |
 
-- **Planning**: ~10-20 seconds
-- **Analysis**: ~20-30 seconds (8-12 modules)
-- **Code Generation**: ~40-60 seconds (parallel)
-- **Verification**: ~10-20 seconds
-- **Total**: ~90-120 seconds
-
-### Optimization Tips
-
-1. **Enable Caching**: Reuse embeddings and LLM responses
-2. **Adjust Parallelism**: Increase `parallel_tasks` for faster processing
-3. **Use Faster Models**: Trade-off between speed and quality
-4. **Persistent Storage**: Enable SurrealDB for multi-session caching
+**Tuning:** enable caching, raise `parallel_tasks`, pick faster models for
+non-critical stages, and turn on SurrealDB for cross-session reuse.
 
 ---
 
-## Troubleshooting
+## Documentation
 
-### Common Issues
-
-**Issue**: `PDF parsing requires additional dependencies`
-- **Solution**: Convert PDF to text first, or use `parse_text()` method
-
-**Issue**: `Failed to connect to SurrealDB`
-- **Solution**: Ensure SurrealDB is running: `surreal start --log trace --user root --pass root`
-
-**Issue**: `Rate limit exceeded`
-- **Solution**: Adjust `max_retries` and `timeout_seconds` in config, or use different API keys
-
-**Issue**: `Module verification failed`
-- **Solution**: Check logs for specific issues, adjust verification settings, or disable strict verification
-
-### Getting Help
-
-- [GitHub Issues](https://github.com/yourusername/Paper2Codes/issues)
-- [Discussions](https://github.com/yourusername/Paper2Codes/discussions)
-- [Documentation](https://docs.rs/paper2codes)
-
-### Health Check
-
-Before running in production, verify your setup:
-
-```bash
-paper2codes health
-```
-
-This will check:
-- Configuration loading
-- API key availability
-- Storage connection (if enabled)
-- System readiness
-
-### Version Information
-
-Check installed version:
-
-```bash
-paper2codes version
-```
+| Guide | What's inside |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design and component internals |
+| [SPECS.md](SPECS.md) | Technical specifications |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment (Docker, K8s, monitoring) |
+| [LLM_API_KEY.md](LLM_API_KEY.md) | LLM provider & API key management |
+| [Paper2Codes-Core/config.example.toml](Paper2Codes-Core/config.example.toml) | Full configuration reference |
+| [TODO.md](TODO.md) | Roadmap and open work |
 
 ---
 
-## Contributing
+## Production readiness
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Paper2Codes has been through comprehensive review and hardening:
 
-### Development Setup
-
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/Paper2Codes.git
-cd Paper2Codes
-
-# Install dev dependencies
-cargo build
-
-# Run tests
-cargo test
-
-# Run with logging
-RUST_LOG=debug cargo run -- process --paper examples/sample_paper.txt
-
-# Format code
-cargo fmt
-
-# Lint
-cargo clippy -- -D warnings
-```
+- ✅ **Security** — input validation, rate limiting, JWT auth, `0600` secret storage
+- ✅ **Performance** — adaptive concurrency, HTTP/2 pooling, multi-level caching
+- ✅ **Reliability** — retry with backoff, health checks, graceful recovery
+- ✅ **Observability** — Prometheus metrics and structured logging
+- ✅ **Quality** — verified algorithms, improved numerical precision, broad error handling
 
 ---
-
-## Citation
-
-If you use Paper2Codes in your research, please cite:
-
-```bibtex
-@software{paper2codes2024,
-  title = {Paper2Codes: Neuro-Symbolic RAG Framework for Automated Code Generation},
-  author = {Your Name},
-  year = {2024},
-  url = {https://github.com/yourusername/Paper2Codes}
-}
-```
-
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Acknowledgments
-
-- Built with [Rust](https://www.rust-lang.org/)
-- UI powered by [Ratatui](https://github.com/ratatui-org/ratatui)
-- Storage by [SurrealDB](https://surrealdb.com/)
-- LLM integration via [OpenRouter](https://openrouter.ai/)
-
----
-
-## Production Readiness
-
-Paper2Codes has undergone comprehensive code review and refactoring to ensure production-level quality:
-
-✅ **Security**: All SQL injection vulnerabilities fixed, input validation implemented, rate limiting configured, JWT authentication  
-✅ **Performance**: Database operations optimized, adaptive concurrency control, HTTP/2 connection pooling, multi-level caching  
-✅ **Code Quality**: Algorithms verified for correctness, numerical precision improved, comprehensive error handling  
-✅ **Reliability**: Automatic retry with exponential backoff, health checking, graceful error recovery  
-✅ **Scalability**: Horizontal scaling ready, adaptive concurrency, smart rate limiting with token awareness  
-✅ **Monitoring**: Prometheus metrics, structured logging, comprehensive observability  
-✅ **Documentation**: Production deployment guide, code review summary, operational runbooks  
-
-**Production Status**: ✅ **APPROVED FOR DEPLOYMENT** (with documented limitations on optional symbolic features)
-
-See [CODE_REVIEW_SUMMARY.md](CODE_REVIEW_SUMMARY.md) for detailed assessment and [PRODUCTION_GUIDE.md](PRODUCTION_GUIDE.md) for deployment instructions.
 
 ## Roadmap
 
-- [x] Core RAG implementation
+- [x] Neuro-symbolic RAG core
 - [x] Multi-agent architecture
-- [x] SurrealDB integration
-- [x] Advanced retrieval with embeddings
-- [x] Interactive TUI
-- [x] API server implementation (see [INTEGRATION.md](INTEGRATION.md))
-- [x] Production-ready security and performance optimizations
-- [ ] WebUI integration (see [INTEGRATION.md](INTEGRATION.md))
+- [x] SurrealDB integration with vector + graph
+- [x] Interactive terminal UI
+- [x] HTTP/WebSocket API server
+- [x] Web control plane (Next.js)
+- [x] Live LLM provider & key management
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
 - [ ] Multi-paper synthesis
@@ -565,11 +306,56 @@ See [CODE_REVIEW_SUMMARY.md](CODE_REVIEW_SUMMARY.md) for detailed assessment and
 
 ---
 
+## Contributing
+
+Contributions are welcome.
+
+```bash
+# Engine
+cd Paper2Codes-Core
+cargo build
+cargo test
+cargo fmt && cargo clippy -- -D warnings
+
+# Control plane
+cd Paper2Codes-WebUI
+npm install
+npm run lint
+```
+
+Open an issue to discuss substantial changes before sending a pull request.
+
+---
+
+## Citation
+
+```bibtex
+@software{paper2codes,
+  title  = {Paper2Codes: A Neuro-Symbolic RAG Framework for Automated Code Generation},
+  author = {Dirac Technologies},
+  url    = {https://github.com/rismanmattotorang/Dirac-Paper2Codes}
+}
+```
+
+---
+
+## License
+
+Released under the MIT License — see [LICENSE](LICENSE).
+
+---
+
+## About Dirac Technologies
+
+**Dirac Technologies** builds tools that close the gap between research and
+working software. Paper2Codes is our reproduction layer for science: rigorous,
+verifiable, and fast — engineering the bridge from ideas on paper to code in
+production.
+
 <div align="center">
 
-**[⬆ back to top](#paper2codes-neuro-symbolic-rag-framework-for-automated-code-generation)**
+**[⬆ back to top](#paper2codes)**
 
-Made with ❤️ by the Paper2Codes team
+Made with ❤️ by **Dirac Technologies**
 
 </div>
-

@@ -61,6 +61,107 @@ fn default_max_tokens() -> Option<u32> {
     Some(4096)
 }
 
+/// Static metadata describing a built-in LLM provider.
+///
+/// Centralising this information removes the duplicated provider literals that
+/// previously lived in `Config::default`, `ConfigLoader::apply_env_overrides`
+/// and the settings handlers, and gives the API a single source of truth for
+/// display names, default endpoints, model lists and key validation hints.
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderInfo {
+    /// Canonical provider id used as the map key (e.g. `"openai"`).
+    pub id: &'static str,
+    /// Human friendly name shown in the UI.
+    pub display_name: &'static str,
+    /// Default API base URL.
+    pub base_url: &'static str,
+    /// Default model identifiers offered for the provider.
+    pub default_models: &'static [&'static str],
+    /// Recognised API key prefixes, used for soft client-side validation hints.
+    pub key_prefixes: &'static [&'static str],
+    /// Environment variable that supplies the key when not set in config.
+    pub env_var: &'static str,
+}
+
+/// Catalog of providers Paper2Codes knows how to talk to.
+pub const KNOWN_PROVIDERS: &[ProviderInfo] = &[
+    ProviderInfo {
+        id: "openai",
+        display_name: "OpenAI",
+        base_url: "https://api.openai.com/v1",
+        default_models: &["gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo"],
+        key_prefixes: &["sk-"],
+        env_var: "OPENAI_API_KEY",
+    },
+    ProviderInfo {
+        id: "anthropic",
+        display_name: "Anthropic",
+        base_url: "https://api.anthropic.com/v1",
+        default_models: &["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+        key_prefixes: &["sk-ant-"],
+        env_var: "ANTHROPIC_API_KEY",
+    },
+    ProviderInfo {
+        id: "openrouter",
+        display_name: "OpenRouter",
+        base_url: "https://openrouter.ai/api/v1",
+        default_models: &[
+            "openai/gpt-4-turbo",
+            "anthropic/claude-3-opus-20240229",
+            "x-ai/grok-2-1212",
+        ],
+        key_prefixes: &["sk-or-"],
+        env_var: "OPENROUTER_API_KEY",
+    },
+    ProviderInfo {
+        id: "xai",
+        display_name: "xAI (Grok)",
+        base_url: "https://api.x.ai/v1",
+        default_models: &["grok-2-1212", "grok-beta"],
+        key_prefixes: &["xai-"],
+        env_var: "XAI_API_KEY",
+    },
+];
+
+/// Look up static metadata for a known provider id.
+pub fn provider_info(id: &str) -> Option<&'static ProviderInfo> {
+    KNOWN_PROVIDERS.iter().find(|p| p.id == id)
+}
+
+/// Environment variable name that supplies the API key for `provider_id`.
+pub fn provider_env_var(provider_id: &str) -> String {
+    provider_info(provider_id)
+        .map(|info| info.env_var.to_string())
+        .unwrap_or_else(|| format!("{}_API_KEY", provider_id.to_uppercase()))
+}
+
+impl ProviderConfig {
+    /// Build a sensible default provider configuration for a known provider id.
+    ///
+    /// Unknown providers get an enabled config with empty metadata so a key can
+    /// still be attached to them.
+    pub fn for_provider(id: &str) -> Self {
+        match provider_info(id) {
+            Some(info) => Self {
+                enabled: true,
+                api_key: None,
+                base_url: Some(info.base_url.to_string()),
+                models: info.default_models.iter().map(|m| m.to_string()).collect(),
+                temperature: default_temperature(),
+                max_tokens: default_max_tokens(),
+            },
+            None => Self {
+                enabled: true,
+                api_key: None,
+                base_url: None,
+                models: Vec::new(),
+                temperature: default_temperature(),
+                max_tokens: default_max_tokens(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     pub planning_model: String,
@@ -477,16 +578,8 @@ impl Config {
             }
         }
 
-        // Then check environment variables
-        let env_var = format!("{}_API_KEY", provider_name.to_uppercase());
-        std::env::var(&env_var).ok().or_else(|| {
-            // Also try OPENROUTER_API_KEY for openrouter
-            if provider_name == "openrouter" {
-                std::env::var("OPENROUTER_API_KEY").ok()
-            } else {
-                None
-            }
-        })
+        // Then check environment variables (provider-specific name from the catalog).
+        std::env::var(provider_env_var(provider_name)).ok()
     }
 
     /// Get the config directory path

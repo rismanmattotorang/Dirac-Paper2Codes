@@ -2,6 +2,48 @@
 
 This document summarizes the assessment and improvements made to LLM API key management in Paper2Codes.
 
+## Latest Update — Dedicated API Key Management (WebUI)
+
+API keys are now fully manageable from the Web UI with a dedicated, per-provider
+panel (**Settings → LLM Configuration → Provider API Keys**). Highlights:
+
+- **Per-provider status** — every provider shows whether a key is configured,
+  a masked preview (e.g. `sk-p…wxyz`), and the key source (`config` vs
+  `environment`). The previous "only the primary provider shows status" bug is
+  fixed.
+- **Set / Update / Remove** — each provider has its own key editor with a
+  show/hide toggle. Keys provided via environment variables are surfaced but
+  protected from accidental removal in the UI.
+- **Live validation ("Test")** — validates a key against the provider with a
+  lightweight, read-only `GET /models` request and reports validity + latency,
+  before or after saving.
+- **Set default provider** — promote any configured provider to the default in
+  one click.
+- **Hot reload** — key changes are merged into the running process via a
+  runtime override store (`AppState::effective_config`) and take effect
+  immediately for in-process consumers (e.g. the streaming LLM endpoint), in
+  addition to being persisted to `config.toml` for worker restarts.
+- **Secure-at-rest** — the persisted `config.toml` is written with `0600`
+  permissions on Unix, and full keys are never returned by any API response.
+
+### New API endpoints
+
+| Method   | Path                                        | Description                              |
+|----------|---------------------------------------------|------------------------------------------|
+| `GET`    | `/api/settings/llm/providers`               | List providers + masked key status       |
+| `PUT`    | `/api/settings/llm/providers/:provider/key` | Set/replace a provider key (persist+live)|
+| `DELETE` | `/api/settings/llm/providers/:provider/key` | Remove a provider key                    |
+| `POST`   | `/api/settings/llm/providers/:provider/test`| Validate a key against the live provider |
+| `PUT`    | `/api/settings/llm/default`                 | Set the default provider                 |
+
+The single source of truth for provider metadata (display name, base URL,
+default models, key prefixes, env var) now lives in `config::KNOWN_PROVIDERS`,
+removing the provider literals previously duplicated across `Config::default`,
+the config loader, and the settings handlers.
+
+---
+
+
 ## Assessment Summary
 
 ### Current State (Before Fixes)
@@ -213,16 +255,16 @@ These can be customized in:
 - Timeout (seconds)
 - Max retries
 
-### Limitations
+### Resolved Limitations
 
-⚠️ **In-Memory Changes**: 
-- Provider changes in Settings page are applied in-memory
-- To persist to config file, backend restart is required
-- Future improvement: Add config file persistence
+✅ **Persistence & hot reload**: Provider and key changes are persisted to
+`config.toml` *and* applied to the running process via the runtime override
+store, so in-process consumers pick them up without a restart.
 
-⚠️ **API Key Management**:
-- API keys cannot be set via Settings page (security)
-- Must be set via config file or environment variables
+✅ **API Key Management via UI**: API keys can now be set, tested, and removed
+per provider from the dedicated Provider API Keys panel. Keys are stored
+server-side, the config file is written with `0600` permissions, and responses
+only ever expose a masked preview — never the full secret.
 
 ## Testing
 

@@ -125,6 +125,28 @@ export interface DatabaseConnectionTestResponse {
   schema_valid?: boolean
 }
 
+// LLM provider key management
+export type KeySource = 'config' | 'environment' | 'none'
+
+export interface ProviderStatus {
+  id: string
+  name: string
+  enabled: boolean
+  is_default: boolean
+  base_url?: string
+  models: string[]
+  configured: boolean
+  masked_key?: string
+  key_source: KeySource
+  key_prefix_hint?: string
+}
+
+export interface TestKeyResponse {
+  valid: boolean
+  message: string
+  latency_ms?: number
+}
+
 export interface AddTeamMemberRequest {
   name: string
   email: string
@@ -226,5 +248,39 @@ export const settingsApi = {
   ): Promise<TeamMember> => {
     const response = await apiClient.put<TeamMember>(`/api/settings/team/members/${memberId}/role`, request)
     return response.data
+  },
+
+  // LLM provider key management
+  listProviders: async (): Promise<ProviderStatus[]> => {
+    const response = await apiClient.get<ProviderStatus[]>('/api/settings/llm/providers')
+    return Array.isArray(response.data) ? response.data : []
+  },
+
+  setProviderKey: async (provider: string, apiKey: string): Promise<ProviderStatus> => {
+    const response = await apiClient.put<ProviderStatus>(
+      `/api/settings/llm/providers/${encodeURIComponent(provider)}/key`,
+      { api_key: apiKey }
+    )
+    return response.data
+  },
+
+  deleteProviderKey: async (provider: string): Promise<ProviderStatus> => {
+    const response = await apiClient.delete<ProviderStatus>(
+      `/api/settings/llm/providers/${encodeURIComponent(provider)}/key`
+    )
+    return response.data
+  },
+
+  testProviderKey: async (provider: string, apiKey?: string): Promise<TestKeyResponse> => {
+    const response = await apiClient.post<TestKeyResponse>(
+      `/api/settings/llm/providers/${encodeURIComponent(provider)}/test`,
+      { api_key: apiKey }
+    )
+    return response.data
+  },
+
+  setDefaultProvider: async (provider: string): Promise<ProviderStatus[]> => {
+    const response = await apiClient.put<ProviderStatus[]>('/api/settings/llm/default', { provider })
+    return Array.isArray(response.data) ? response.data : []
   },
 }
