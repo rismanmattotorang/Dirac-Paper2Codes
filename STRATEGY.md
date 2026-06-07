@@ -119,11 +119,20 @@ testable. Closes gap #3.
   `RubricGrader` are traits, so the runner is unit-tested with mocks while the
   CLI wraps the real coordinator. Makes "superior" measurable and regression-safe.
 
-### Phase 6 — Graph-native retrieval (leverage SurrealDB)
-- **GraphRAG over the dependency graph**: use SurrealDB's graph edges
-  (module/citation dependencies) to expand retrieval along structural relations,
-  and to order generation by topological dependency — a differentiator no
-  competitor has, since they lack a unified graph+vector store.
+### Phase 6 — Graph-native retrieval (leverage SurrealDB)  ✅ *shipped in this PR*
+- **Topological generation ordering**: `GraphAnalyzer::topological_order`
+  (Kahn's algorithm, deterministic, cycle-safe) orders modules so each is
+  generated only after its dependencies. The coordinator now wires cross-module
+  coding-task dependencies from the plan's dependency graph, adding only
+  "backward" edges along the topological order so the task graph stays acyclic
+  and the readiness check can never deadlock — fixing a real gap where coding
+  tasks previously depended only on their own analysis task.
+- **GraphRAG structural expansion**: `GraphAnalyzer::dependency_closure` (BFS,
+  hop-limited) surfaces a module's transitive dependencies; the coordinator
+  injects them into each coding task as an explicit "depends on: …" hint.
+- Both are pure, unit-tested graph algorithms over the existing
+  `DependencyGraph`; a differentiator competitors lack without a unified
+  graph+vector store.
 
 ---
 

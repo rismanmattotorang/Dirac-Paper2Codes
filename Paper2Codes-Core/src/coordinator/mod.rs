@@ -295,9 +295,27 @@ impl Coordinator {
             }
         }
 
-        // Add coding tasks after analysis tasks
+        // Add coding tasks after analysis tasks, wiring cross-module dependencies
+        // from the plan's dependency graph so a module is generated only after the
+        // modules it depends on (Phase 6 graph-native generation ordering).
+        use crate::storage::graph::GraphAnalyzer;
+
+        let module_ids: Vec<String> = plan.modules.iter().map(|m| m.id.clone()).collect();
+        let order = GraphAnalyzer::topological_order(&module_ids, &plan.dependencies);
+        let rank: std::collections::HashMap<String, usize> = order
+            .iter()
+            .enumerate()
+            .map(|(i, m)| (m.clone(), i))
+            .collect();
+
+        // First pass: build coding tasks (each depending on its analysis task)
+        // and map module id -> coding task id.
+        let mut coding_tasks: Vec<(String, Task)> = Vec::new();
+        let mut coding_id_by_module: std::collections::HashMap<String, Uuid> =
+            std::collections::HashMap::new();
+
         for module in &plan.modules {
-            let analysis_task = self
+            let analysis_task_id = self
                 .state
                 .task_queue
                 .tasks
@@ -305,20 +323,52 @@ impl Coordinator {
                 .find(|t| {
                     matches!(&t.task_type, TaskType::Analysis { module_id } if module_id == &module.id)
                 })
-                .cloned();
+                .map(|t| t.id);
 
-            if let Some(analysis_task) = analysis_task {
-                let coding_task = Task::new(
-                    TaskType::Coding {
-                        module_id: module.id.clone(),
-                    },
-                    format!("Implement module: {}", module.name),
-                );
-                // Set dependency on analysis task
-                let mut coding_task = coding_task;
-                coding_task.dependencies.push(analysis_task.id);
-                self.state.task_queue.add_task(coding_task);
+            // GraphRAG-style hint: surface the module's transitive dependencies
+            // (up to 2 hops) so the coder knows what it can build on.
+            let deps = GraphAnalyzer::dependency_closure(&plan.dependencies, &module.id, 2);
+            let description = if deps.is_empty() {
+                format!("Implement module: {}", module.name)
+            } else {
+                format!(
+                    "Implement module: {} (depends on: {})",
+                    module.name,
+                    deps.join(", ")
+                )
+            };
+
+            let mut coding_task = Task::new(
+                TaskType::Coding {
+                    module_id: module.id.clone(),
+                },
+                description,
+            );
+            if let Some(analysis_id) = analysis_task_id {
+                coding_task.dependencies.push(analysis_id);
             }
+            coding_id_by_module.insert(module.id.clone(), coding_task.id);
+            coding_tasks.push((module.id.clone(), coding_task));
+        }
+
+        // Second pass: add cross-module coding dependencies, but only "backward"
+        // along the topological order. This guarantees the task-dependency graph
+        // stays acyclic even if the module graph has cycles, so the readiness
+        // check can never deadlock.
+        for (module_id, task) in coding_tasks.iter_mut() {
+            let my_rank = rank.get(module_id).copied().unwrap_or(usize::MAX);
+            for dep in plan.dependencies.get_dependencies(module_id) {
+                if let Some(dep_task_id) = coding_id_by_module.get(&dep) {
+                    let dep_rank = rank.get(&dep).copied().unwrap_or(usize::MAX);
+                    if dep_rank < my_rank && !task.dependencies.contains(dep_task_id) {
+                        task.dependencies.push(*dep_task_id);
+                    }
+                }
+            }
+        }
+
+        for (_module_id, task) in coding_tasks {
+            self.state.task_queue.add_task(task);
         }
 
         // Main iteration loop
