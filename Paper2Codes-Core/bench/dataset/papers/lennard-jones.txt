@@ -1,0 +1,20 @@
+The Lennard-Jones Potential for Pairwise Molecular Interactions
+
+Abstract. We describe the Lennard-Jones (12-6) potential, a standard model for
+the interaction energy between a pair of neutral atoms or molecules as a function
+of their separation.
+
+1. Model. Given the separation distance r, the depth of the potential well
+epsilon, and the distance sigma at which the potential is zero, the interaction
+energy is
+
+  Equation (1): V(r) = 4 * epsilon * ((sigma / r)^12 - (sigma / r)^6)
+
+2. Properties. The potential has a minimum at r_min = 2^(1/6) * sigma, where
+V(r_min) = -epsilon. The r^-12 term models short-range Pauli repulsion and the
+r^-6 term models long-range van der Waals attraction.
+
+3. Implementation notes. The implementation should compute V(r) for given
+epsilon, sigma, and r, and expose the well minimum. Energies are reported in the
+same units as epsilon. Verify that the minimum occurs at 2^(1/6)*sigma and equals
+-epsilon.

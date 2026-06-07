@@ -14,10 +14,40 @@
       "skill_id": "computational-physics"
     },
     {
+      "id": "lennard-jones",
+      "paper_path": "papers/lennard-jones.txt",
+      "reference_repo": "refs/lennard-jones",
+      "skill_id": "computational-chemistry"
+    },
+    {
+      "id": "gc-content",
+      "paper_path": "papers/gc-content.txt",
+      "reference_repo": "refs/gc-content",
+      "skill_id": "computational-biology-bioinformatics"
+    },
+    {
+      "id": "kmer-count",
+      "paper_path": "papers/kmer-count.txt",
+      "reference_repo": "refs/kmer-count",
+      "skill_id": "computational-genomics"
+    },
+    {
       "id": "bell-state",
       "paper_path": "papers/bell-state.txt",
       "reference_repo": "refs/bell-state",
       "skill_id": "quantum-computation"
+    },
+    {
+      "id": "heat-1d",
+      "paper_path": "papers/heat-1d.txt",
+      "reference_repo": "refs/heat-1d",
+      "skill_id": "computational-fluid-dynamics"
+    },
+    {
+      "id": "eoq",
+      "paper_path": "papers/eoq.txt",
+      "reference_repo": "refs/eoq",
+      "skill_id": "computational-supply-chain"
     }
   ]
 }
