@@ -22,17 +22,42 @@ What it covers:
   - **offline paper parsing → segmentation → retrieval** on a real bundled paper,
   - **the full benchmark harness** over the bundled dataset,
   - the **domain-skill main scenario** (choose skill → skill-guided generation → evaluate),
-  - all 8 built-in domain skills are well-formed.
+  - all 8 built-in domain skills are well-formed,
+  - **TUI rendering** — every terminal view is rendered into an in-memory
+    `ratatui::TestBackend` and asserted on (`tests/tui_render.rs`).
 - **CLI**: `paper2codes version` and an **offline benchmark** run
   (`paper2codes bench --offline`) that scores the bundled dataset with a
   deterministic stub generator — no network, no keys.
 - **Web UI**: `tsc --noEmit` type-check (when `node_modules` is present).
 
+### Automated UI tests
+
+- **TUI** (no extra setup) — `ratatui`'s `TestBackend` renders each view to an
+  in-memory buffer and asserts on the output:
+
+  ```bash
+  cargo test --manifest-path Paper2Codes-Core/Cargo.toml --test tui_render
+  ```
+
+- **Web UI** (Playwright) — browser tests that **mock the backend `/api/**`
+  routes**, so they need neither the Rust API nor API keys:
+
+  ```bash
+  cd Paper2Codes-WebUI
+  pnpm install
+  npx playwright install chromium   # one-time browser download
+  pnpm test:e2e                     # or: pnpm test:e2e:ui
+  ```
+
+  Specs live in `Paper2Codes-WebUI/e2e/` (sidebar navigation, the Domain Skills
+  catalog/detail/language switch, and skill-selection persistence). The
+  Playwright config auto-starts `next dev`.
+
 ### Manual UI checks
 
-- **Web UI** — `cd Paper2Codes-WebUI && pnpm install && pnpm dev`, open
-  <http://localhost:3000>: visit *Domain Skills* (browse/select a skill + language),
-  *Settings → LLM Configuration* (manage provider keys), *Papers*, *Generated Code*.
+- **Web UI** — `cd Paper2Codes-WebUI && pnpm dev`, open <http://localhost:3000>:
+  visit *Domain Skills* (browse/select a skill + language), *Settings → LLM
+  Configuration* (manage provider keys), *Papers*, *Generated Code*.
 - **TUI** — `paper2codes tui`; press `7` for the **Domain Skills** view, and the
   number/Tab keys to move between Dashboard/Tasks/Modules/Code/Skills/etc.
 
