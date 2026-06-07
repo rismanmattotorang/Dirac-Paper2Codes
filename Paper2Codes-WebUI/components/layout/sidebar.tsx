@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter, type PageId } from "@/components/app-router"
-import { IconHome, IconFileText, IconZap, IconCode, IconToolbox, IconBarChart, IconSettings, IconX } from "@/components/ui/icons"
+import { IconHome, IconFileText, IconZap, IconCode, IconToolbox, IconBarChart, IconSettings, IconX, IconBrain } from "@/components/ui/icons"
 import { useEffect } from "react"
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
   const menuItems = [
     { id: "dashboard" as PageId, label: "Dashboard", icon: IconHome, description: "Overview and metrics" },
     { id: "papers" as PageId, label: "Papers", icon: IconFileText, description: "Manage research papers" },
+    { id: "skills" as PageId, label: "Domain Skills", icon: IconBrain, description: "Choose a domain specialisation" },
     { id: "tasks" as PageId, label: "Task Queue", icon: IconZap, description: "Active processing tasks" },
     { id: "code" as PageId, label: "Generated Code", icon: IconCode, description: "View generated code" },
     { id: "tools" as PageId, label: "Tools & Prompts", icon: IconToolbox, description: "Inspect system prompts" },

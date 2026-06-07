@@ -22,6 +22,8 @@ pub mod search;
 #[cfg(feature = "api")]
 pub mod settings;
 #[cfg(feature = "api")]
+pub mod skills;
+#[cfg(feature = "api")]
 pub mod streaming;
 pub mod tasks;
 #[cfg(feature = "api")]

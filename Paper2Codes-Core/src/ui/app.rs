@@ -47,6 +47,7 @@ pub enum ViewMode {
     Tasks,
     Modules,
     Code,
+    Skills,
     Logs,
     Statistics,
     Settings,
@@ -655,6 +656,9 @@ impl App {
             (_, KeyCode::Char('6')) => {
                 self.view_mode = ViewMode::Settings;
             }
+            (_, KeyCode::Char('7')) => {
+                self.view_mode = ViewMode::Skills;
+            }
             (_, KeyCode::PageDown) => {
                 self.scroll_down();
             }
@@ -883,6 +887,46 @@ impl App {
         frame.render_widget(connection_widget, chunks[1]);
     }
 
+    fn render_skills_view(&mut self, frame: &mut Frame) {
+        let chunks = Layout::default()
+            .direction(ratatui::layout::Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(10)])
+            .split(frame.size());
+
+        self.render_status_bar(frame, chunks[0]);
+
+        let registry = crate::skills::SkillRegistry::with_builtins();
+        let mut lines: Vec<Line> = Vec::new();
+        lines.push(Line::from(Span::styled(
+            "Domain skills specialise retrieval, generation, and verification.",
+            self.theme.title_style(),
+        )));
+        lines.push(Line::from(Span::raw(
+            "Select one in the Web UI (Domain Skills) before uploading a paper.",
+        )));
+        lines.push(Line::from(""));
+
+        for skill in registry.list() {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("• {} ", skill.name),
+                    self.theme.title_style().add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(format!("[{}]", skill.languages.join(", "))),
+            ]));
+            lines.push(Line::from(Span::raw(format!("    {}", skill.description))));
+        }
+
+        let widget = ratatui::widgets::Paragraph::new(lines)
+            .block(
+                ratatui::widgets::Block::default()
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .title(" Domain Skills "),
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        frame.render_widget(widget, chunks[1]);
+    }
+
     fn render_admin_console_view(&mut self, frame: &mut Frame) {
         let chunks = Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
@@ -906,7 +950,8 @@ impl App {
             ViewMode::Dashboard => ViewMode::Tasks,
             ViewMode::Tasks => ViewMode::Modules,
             ViewMode::Modules => ViewMode::Code,
-            ViewMode::Code => ViewMode::Statistics,
+            ViewMode::Code => ViewMode::Skills,
+            ViewMode::Skills => ViewMode::Statistics,
             ViewMode::Statistics => ViewMode::Settings,
             ViewMode::Settings => ViewMode::Logs,
             ViewMode::Logs => ViewMode::Storage,
@@ -1145,6 +1190,7 @@ impl App {
             ViewMode::Tasks => self.render_tasks_view(frame),
             ViewMode::Modules => self.render_modules_view(frame),
             ViewMode::Code => self.render_code_view(frame),
+            ViewMode::Skills => self.render_skills_view(frame),
             ViewMode::Statistics => self.render_statistics_view(frame),
             ViewMode::Settings => self.render_settings_view(frame),
             ViewMode::Logs => self.render_logs_view(frame),
@@ -1331,6 +1377,7 @@ impl App {
             ViewMode::Tasks => "Tasks",
             ViewMode::Modules => "Modules",
             ViewMode::Code => "Code",
+            ViewMode::Skills => "Domain Skills",
             ViewMode::Statistics => "Statistics",
             ViewMode::Settings => "Settings",
             ViewMode::Logs => "Logs",

@@ -102,6 +102,7 @@ Paper2Codes ships as two cooperating components:
 - **Persistent storage** — SurrealDB with native vector search and graph-based dependency tracking.
 
 ### Platform
+- **Domain Skills** — choose a computational-domain skill (Finance, Physics, Chemistry, Biology/Bioinformatics, Genomics, Quantum, CFD, Supply Chain, …) that specialises retrieval, generation, and verification; skills are reusable and user-improvable. See [SKILLS.md](SKILLS.md).
 - **Live LLM key management** — set, test, rotate, and remove provider keys per provider from the web UI; changes take effect immediately and are stored server-side (never exposed in full). See [LLM_API_KEY.md](LLM_API_KEY.md).
 - **Dual interface** — a browser control plane *and* a fully interactive terminal UI (Ratatui).
 - **Real-time updates** — REST + WebSocket streaming of task progress and logs.
@@ -273,6 +274,7 @@ non-critical stages, and turn on SurrealDB for cross-session reuse.
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment (Docker, K8s, monitoring) |
 | [LLM_API_KEY.md](LLM_API_KEY.md) | LLM provider & API key management |
 | [Paper2Codes-Core/config.example.toml](Paper2Codes-Core/config.example.toml) | Full configuration reference |
+| [SKILLS.md](SKILLS.md) | Domain Skills: choose, reuse, and improve domain specialisations |
 | [bench/README.md](Paper2Codes-Core/bench/README.md) | Reproducibility benchmark harness |
 | [STRATEGY.md](STRATEGY.md) | Competitive benchmark & superiority roadmap |
 | [TODO.md](TODO.md) | Roadmap and open work |
@@ -305,6 +307,7 @@ Paper2Codes has been through comprehensive review and hardening:
 - [x] Corrective retrieval (CRAG) + self-consistency + self-debugging repair
 - [x] Reproducibility benchmark harness (`paper2codes bench`)
 - [x] Graph-native generation ordering + dependency expansion
+- [x] Domain Skills (choosable, reusable, improvable) across 8 computational domains
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
 - [ ] Multi-paper synthesis

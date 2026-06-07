@@ -117,6 +117,15 @@ impl ApiServer {
                 .route(
                     "/api/settings/llm/providers",
                     get(crate::api::handlers::llm_keys::list_providers),
+                )
+                // Domain skills (read-only listing/detail is public)
+                .route(
+                    "/api/skills",
+                    get(crate::api::handlers::skills::list_skills),
+                )
+                .route(
+                    "/api/skills/:id",
+                    get(crate::api::handlers::skills::get_skill),
                 );
         }
 
@@ -222,6 +231,11 @@ impl ApiServer {
                 .route(
                     "/api/settings/llm/default",
                     put(crate::api::handlers::llm_keys::set_default_provider),
+                )
+                // Domain skill upsert (create / improve a user skill)
+                .route(
+                    "/api/skills/:id",
+                    put(crate::api::handlers::skills::upsert_skill),
                 )
                 .route(
                     "/api/settings/security/sessions/:id",
