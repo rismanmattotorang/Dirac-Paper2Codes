@@ -1,8 +1,12 @@
+pub mod augment;
 pub mod bm25;
 pub mod embedding;
 pub mod fusion;
 pub mod vector_store;
 
+pub use augment::{
+    combine_embeddings, parse_rerank_order, LlmQueryExpander, LlmReranker, QueryExpander, Reranker,
+};
 pub use bm25::{tokenize, Bm25Index};
 pub use embedding::{EmbeddingProvider, EmbeddingService};
 pub use fusion::{fused_relevance_map, reciprocal_rank_fusion, DEFAULT_RRF_K};
@@ -37,6 +41,13 @@ pub struct DefaultCPREngine {
     vector_store: Option<Arc<tokio::sync::RwLock<dyn VectorStore>>>,
     initialized: std::sync::atomic::AtomicBool,
     init_lock: tokio::sync::Mutex<()>,
+    // Phase 3 (optional) retrieval augmentation. When absent, retrieval falls
+    // back to the Phase 1/2 hybrid pipeline.
+    query_expander: Option<Arc<dyn augment::QueryExpander>>,
+    reranker: Option<Arc<dyn augment::Reranker>>,
+    /// Weight of the original-query embedding when blending with the HyDE
+    /// hypothetical-document embedding (1.0 = ignore HyDE, 0.0 = HyDE only).
+    hyde_alpha: f32,
 }
 
 impl DefaultCPREngine {
@@ -51,7 +62,29 @@ impl DefaultCPREngine {
             vector_store: None,
             initialized: std::sync::atomic::AtomicBool::new(false),
             init_lock: tokio::sync::Mutex::new(()),
+            query_expander: None,
+            reranker: None,
+            hyde_alpha: 0.5,
         }
+    }
+
+    /// Attach a HyDE query expander (Phase 3). Only active when an embedding
+    /// service is also configured.
+    pub fn with_query_expander(mut self, expander: Arc<dyn augment::QueryExpander>) -> Self {
+        self.query_expander = Some(expander);
+        self
+    }
+
+    /// Attach a learned reranker (Phase 3) applied to the fused top-N before MMR.
+    pub fn with_reranker(mut self, reranker: Arc<dyn augment::Reranker>) -> Self {
+        self.reranker = Some(reranker);
+        self
+    }
+
+    /// Set the HyDE blend weight for the original-query embedding (default 0.5).
+    pub fn with_hyde_alpha(mut self, alpha: f32) -> Self {
+        self.hyde_alpha = alpha.clamp(0.0, 1.0);
+        self
     }
 
     pub fn with_weights(mut self, lambda: f32, delta: f32, gamma: f32) -> Self {
@@ -366,7 +399,35 @@ impl CPREngine for DefaultCPREngine {
                 if let (Some(embedding_service), Some(vector_store)) =
                     (&self.embedding_service, &self.vector_store)
                 {
-                    let query_embedding = embedding_service.embed(&task.description).await?;
+                    // Base query embedding, optionally blended with a HyDE
+                    // hypothetical-document embedding for better semantic recall.
+                    let base_embedding = embedding_service.embed(&task.description).await?;
+                    let query_embedding = match &self.query_expander {
+                        Some(expander) => match expander.expand(task).await {
+                            Ok(Some(doc)) if !doc.trim().is_empty() => {
+                                match embedding_service.embed(&doc).await {
+                                    Ok(doc_embedding) => augment::combine_embeddings(
+                                        &base_embedding,
+                                        &doc_embedding,
+                                        self.hyde_alpha,
+                                    ),
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "HyDE embedding failed, using query embedding: {}",
+                                            e
+                                        );
+                                        base_embedding
+                                    }
+                                }
+                            }
+                            Ok(_) => base_embedding,
+                            Err(e) => {
+                                tracing::warn!("HyDE expansion failed, using query embedding: {}", e);
+                                base_embedding
+                            }
+                        },
+                        None => base_embedding,
+                    };
                     let store = vector_store.read().await;
                     store
                         .search(&query_embedding, (k * 4).max(10))
@@ -438,8 +499,49 @@ impl CPREngine for DefaultCPREngine {
             scored_segments.push((segment.clone(), score));
         }
 
-        // 4. Select top-k from paper using diversity-aware selection
+        // 4. Sort by fused score.
         scored_segments.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // 4b. Optional learned reranking (Phase 3): reorder the fused top-N with
+        //     an LLM reranker, then re-derive relevance from the new ordering so
+        //     it drives the subsequent MMR selection. Falls back to the fused
+        //     ordering on any error.
+        if let Some(reranker) = &self.reranker {
+            let pool_size = (k * 3).max(10).min(scored_segments.len());
+            if pool_size > 1 {
+                let pool: Vec<(PaperSegment, f32)> = scored_segments[..pool_size].to_vec();
+                let pool_ctx: Vec<RetrievedContext> = pool
+                    .iter()
+                    .map(|(seg, score)| RetrievedContext {
+                        segment: seg.clone(),
+                        score: *score,
+                        source: crate::types::ContextSource::Paper,
+                        relevance_reason: String::new(),
+                    })
+                    .collect();
+
+                match reranker.rerank(task, &pool_ctx).await {
+                    Ok(order) => {
+                        let n = pool.len();
+                        let mut reordered: Vec<(PaperSegment, f32)> = Vec::with_capacity(n);
+                        for (new_rank, &orig_idx) in order.iter().enumerate() {
+                            if let Some((seg, _)) = pool.get(orig_idx) {
+                                // Rank-derived relevance in (0, 1], highest first.
+                                let new_score = (n - new_rank) as f32 / n as f32;
+                                reordered.push((seg.clone(), new_score));
+                            }
+                        }
+                        // Keep any tail segments beyond the reranked pool.
+                        let tail = scored_segments.split_off(pool_size);
+                        scored_segments = reordered;
+                        scored_segments.extend(tail);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Reranking failed, using fused ordering: {}", e);
+                    }
+                }
+            }
+        }
 
         // Apply diversity filtering to avoid redundant segments
         let mut contexts: Vec<RetrievedContext> = Self::select_diverse_segments(scored_segments, k)

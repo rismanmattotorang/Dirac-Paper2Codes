@@ -76,13 +76,20 @@ Regex extraction of structural anchors ("Algorithm 1", "Equation (5)",
 of segments that declare the same anchor. High-precision, deterministic,
 testable. Closes gap #3.
 
-### Phase 3 — Query transformation + learned reranking
-- **HyDE**: ask the planning/analysis LLM for a short *hypothetical
-  implementation sketch* of the task, embed *that*, and retrieve against it —
-  bridging the query↔document vocabulary gap. Pair with original-query reranking.
-- **Cross-encoder / LLM reranker**: re-score the fused top-N with a cross-encoder
-  (or an LLM-as-reranker prompt) for top-of-list precision before MMR.
-- Feature-flagged; falls back to Phase 1+2 when no LLM/cross-encoder is available.
+### Phase 3 — Query transformation + learned reranking  ✅ *shipped in this PR*
+- **HyDE** (`retrieval/augment.rs`): an LLM writes a short *hypothetical
+  implementation sketch* for the task; we embed it and blend it with the
+  original-query embedding (`combine_embeddings`, L2-renormalised) before dense
+  search — bridging the query↔document vocabulary gap while a poor hypothesis
+  cannot fully derail retrieval.
+- **LLM reranker** (`retrieval/augment.rs`): the fused top-N candidates are
+  re-ordered by an LLM acting as a cross-encoder-style reranker; the new order
+  re-derives relevance that drives MMR selection. Response parsing
+  (`parse_rerank_order`) is forgiving and always yields a complete permutation.
+- **Capability-gated**: HyDE needs an embedding key, reranking needs an LLM
+  client; both fall back cleanly to the Phase 1+2 pipeline when absent. Wired in
+  the `Coordinator` and isolated behind the `QueryExpander` / `Reranker` traits
+  so the deterministic pieces are unit-tested and the LLM calls are mockable.
 
 ### Phase 4 — Corrective retrieval + code-gen quality
 - **CRAG / Self-RAG**: a lightweight retrieval-quality grader that triggers query

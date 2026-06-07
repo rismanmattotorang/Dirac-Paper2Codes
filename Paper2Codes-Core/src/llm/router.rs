@@ -151,6 +151,15 @@ impl LLMRouter {
         self.cache.clone()
     }
 
+    /// Return a client for the default provider (or any available client), for
+    /// auxiliary tasks such as HyDE query expansion and retrieval reranking.
+    pub fn default_client(&self) -> Option<Arc<dyn LLMClient>> {
+        self.clients
+            .get(&self.config.llm.default_provider)
+            .cloned()
+            .or_else(|| self.clients.values().next().cloned())
+    }
+
     /// Convert task type to strategy task type
     fn task_type_to_strategy_type(&self, task: &Task) -> StrategyTaskType {
         match task.task_type {
