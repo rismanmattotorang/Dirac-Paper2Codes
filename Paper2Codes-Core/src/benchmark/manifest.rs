@@ -24,6 +24,10 @@ pub struct BenchmarkCase {
     /// Optional rubric file (JSON) for reference-free judge scoring.
     #[serde(default)]
     pub rubric_path: Option<PathBuf>,
+    /// Optional domain skill id to specialise generation for this case. When
+    /// absent, generators may auto-suggest a skill from the paper text.
+    #[serde(default)]
+    pub skill_id: Option<String>,
 }
 
 /// A benchmark manifest: an ordered set of cases plus optional metadata.

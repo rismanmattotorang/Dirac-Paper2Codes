@@ -1,0 +1,28 @@
+Closed-Form Pricing of European Options under the Black-Scholes Model
+
+Abstract. We present the Black-Scholes formula for pricing European call and put
+options on a non-dividend-paying asset. Given the current spot price S, strike K,
+risk-free rate r, volatility sigma, and time to maturity T, the price of a
+European call is given in closed form.
+
+1. Model. The asset price follows geometric Brownian motion. Under the
+risk-neutral measure, the discounted price is a martingale.
+
+2. Method (Algorithm 1). Compute the auxiliary quantities
+
+  Equation (1): d1 = (ln(S/K) + (r + sigma^2 / 2) * T) / (sigma * sqrt(T))
+  Equation (2): d2 = d1 - sigma * sqrt(T)
+
+The European call price is
+
+  Equation (3): C = S * N(d1) - K * exp(-r * T) * N(d2)
+
+and by put-call parity the put price is
+
+  Equation (4): P = K * exp(-r * T) * N(-d2) - S * N(-d1)
+
+where N(.) is the standard normal cumulative distribution function.
+
+3. Implementation notes. The implementation should accept (S, K, r, sigma, T)
+and return the call and put prices. Validate against put-call parity:
+C - P = S - K * exp(-r * T).

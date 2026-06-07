@@ -1,0 +1,18 @@
+Newton's Method for Computing Square Roots
+
+Abstract. We describe Newton's iteration for computing the square root of a
+non-negative real number, a classic fixed-point method with quadratic
+convergence.
+
+1. Problem. Given a >= 0, find x such that x^2 = a, i.e. the root of
+f(x) = x^2 - a.
+
+2. Method (Algorithm 1). Starting from an initial guess x0 > 0, iterate
+
+  Equation (1): x_{n+1} = 0.5 * (x_n + a / x_n)
+
+until |x_{n+1} - x_n| < tol. The iteration converges quadratically to sqrt(a).
+
+3. Implementation notes. The implementation should take a, an optional tolerance,
+and an iteration cap, and return the approximation. The invariant x_n > 0 must be
+maintained, and the result must satisfy |result^2 - a| < tol.

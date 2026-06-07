@@ -1,0 +1,20 @@
+Preparation of a Two-Qubit Bell State
+
+Abstract. We describe the canonical quantum circuit that prepares the maximally
+entangled Bell state from two qubits initialised in the |00> state.
+
+1. Background. A Bell state is a maximally entangled two-qubit state. The target
+state is
+
+  Equation (1): |Phi+> = (|00> + |11>) / sqrt(2)
+
+2. Method (Algorithm 1). Starting from |00>:
+  (a) apply a Hadamard gate H to qubit 0, producing (|0> + |1>)/sqrt(2) on qubit 0;
+  (b) apply a CNOT gate with qubit 0 as control and qubit 1 as target.
+
+The resulting two-qubit state is the Bell state |Phi+>.
+
+3. Implementation notes. The implementation should construct the circuit, run it
+on a state-vector simulator, and verify that measuring both qubits yields only
+the correlated outcomes 00 and 11 with equal probability. The state must remain
+normalised (probabilities sum to 1).
