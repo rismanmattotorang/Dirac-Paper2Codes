@@ -71,6 +71,21 @@ rust = ["ndarray", "statrs"]
   the user skills directory `<config>/paper2codes/skills/<id>.toml`), or simply
   drop a `<id>.toml` file there. User skills override built-ins with the same id.
 
+## How a selected skill drives generation
+
+Once a skill is selected, it specialises the actual code generation:
+
+- **Web UI** — selecting a skill on the *Domain Skills* page persists `{skillId,
+  language}`. The next paper upload forwards it on the live processing call:
+  `POST /api/papers/:id/process?skill_id=<id>&language=<lang>`. When LLM keys are
+  configured, the backend runs skill-guided generation (the skill's primer +
+  recommended libraries are injected into the coding tasks, which also biases
+  retrieval); without keys it parses/stores and skips generation.
+- **CLI** — `paper2codes process --paper p.pdf --skill computational-physics --language python`.
+- **Engine** — `Coordinator::set_generation_profile(skill, language)` applies the
+  profile; `Skill::augment_task(description, language)` is the deterministic,
+  unit-tested function that injects the guidance.
+
 ## API
 
 | Method | Path | Description |
@@ -78,6 +93,7 @@ rust = ["ndarray", "statrs"]
 | `GET` | `/api/skills` | List all skills (built-in + user) |
 | `GET` | `/api/skills/:id` | Fetch one skill |
 | `PUT` | `/api/skills/:id` | Create or improve a user skill |
+| `POST` | `/api/papers/:id/process?skill_id&language` | Process a paper; a chosen skill drives generation |
 
 ## Library API (Rust)
 

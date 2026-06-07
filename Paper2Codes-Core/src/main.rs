@@ -31,6 +31,14 @@ enum Commands {
         /// Output directory for generated code
         #[arg(short, long, default_value = "./output")]
         output: String,
+
+        /// Domain skill id to specialise generation (e.g. computational-physics)
+        #[arg(long)]
+        skill: Option<String>,
+
+        /// Target language for generation (defaults to the skill's default)
+        #[arg(long)]
+        language: Option<String>,
     },
     /// Run the interactive TUI
     Tui {
@@ -130,7 +138,12 @@ async fn main() -> Result<()> {
     info!("Configuration loaded");
 
     match cli.command {
-        Commands::Process { paper, output } => {
+        Commands::Process {
+            paper,
+            output,
+            skill,
+            language,
+        } => {
             info!("Processing paper: {}", paper);
             info!("Output directory: {}", output);
 
@@ -217,6 +230,28 @@ async fn main() -> Result<()> {
                     )),
                 )
             })?;
+
+            // Apply the domain-skill generation profile, if requested.
+            if let Some(skill_id) = &skill {
+                let mut registry = paper2codes::skills::SkillRegistry::with_builtins();
+                if let Ok(dir) = paper2codes::skills::SkillRegistry::user_skills_dir() {
+                    let _ = registry.load_user_dir(&dir);
+                }
+                match registry.get(skill_id) {
+                    Some(skill) => {
+                        let lang = language.clone().unwrap_or_else(|| skill.default_language().to_string());
+                        info!("Using domain skill '{}' ({}) for generation", skill.name, lang);
+                        println!("Domain skill: {} ({})", skill.name, lang);
+                        coordinator.set_generation_profile(Some(skill.clone()), Some(lang));
+                    }
+                    None => {
+                        return Err(paper2codes::error::Paper2CodesError::Validation(format!(
+                            "Unknown skill '{}'. Run with a valid skill id (see /api/skills).",
+                            skill_id
+                        )));
+                    }
+                }
+            }
 
             // Process paper with better error context
             coordinator.set_output_path(output_path.clone());

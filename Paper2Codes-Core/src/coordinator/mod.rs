@@ -19,6 +19,23 @@ use chrono::Utc;
 
 pub use metrics::{AgentMetrics, CoordinatorMetrics, IterationMetrics, MetricsCollector};
 
+/// Optional domain-skill profile that specialises generation for a run.
+#[derive(Debug, Clone, Default)]
+pub struct GenerationProfile {
+    pub skill: Option<crate::skills::Skill>,
+    pub language: Option<String>,
+}
+
+impl GenerationProfile {
+    /// The effective target language (explicit, else the skill's default, else python).
+    pub fn language(&self) -> String {
+        self.language
+            .clone()
+            .or_else(|| self.skill.as_ref().map(|s| s.default_language().to_string()))
+            .unwrap_or_else(|| "python".to_string())
+    }
+}
+
 pub struct Coordinator {
     config: Config,
     planning_agent: PlanningAgent,
@@ -31,6 +48,7 @@ pub struct Coordinator {
     state: CoordinatorState,
     concurrency_controller: Arc<AdaptiveConcurrency>,
     metrics_collector: Arc<MetricsCollector>,
+    generation_profile: GenerationProfile,
 }
 
 pub struct CoordinatorState {
@@ -226,6 +244,7 @@ impl Coordinator {
             storage_manager,
             concurrency_controller,
             metrics_collector,
+            generation_profile: GenerationProfile::default(),
             state: CoordinatorState {
                 paper: None,
                 plan: None,
@@ -328,7 +347,7 @@ impl Coordinator {
             // GraphRAG-style hint: surface the module's transitive dependencies
             // (up to 2 hops) so the coder knows what it can build on.
             let deps = GraphAnalyzer::dependency_closure(&plan.dependencies, &module.id, 2);
-            let description = if deps.is_empty() {
+            let mut description = if deps.is_empty() {
                 format!("Implement module: {}", module.name)
             } else {
                 format!(
@@ -337,6 +356,13 @@ impl Coordinator {
                     deps.join(", ")
                 )
             };
+
+            // Domain-skill specialisation: inject the skill's expertise primer +
+            // recommended libraries so the chosen domain drives generation (and
+            // the added terms bias retrieval).
+            if let Some(skill) = &self.generation_profile.skill {
+                description = skill.augment_task(&description, &self.generation_profile.language());
+            }
 
             let mut coding_task = Task::new(
                 TaskType::Coding {
@@ -960,6 +986,17 @@ impl Coordinator {
 
     pub fn set_output_path(&mut self, path: PathBuf) {
         self.state.repository = Arc::new(Repository::new(path));
+    }
+
+    /// Set the domain-skill generation profile for this run. When set, the
+    /// skill's expertise primer and recommended libraries are injected into
+    /// coding tasks (driving generation and biasing retrieval).
+    pub fn set_generation_profile(
+        &mut self,
+        skill: Option<crate::skills::Skill>,
+        language: Option<String>,
+    ) {
+        self.generation_profile = GenerationProfile { skill, language };
     }
 
     // Storage persistence helpers

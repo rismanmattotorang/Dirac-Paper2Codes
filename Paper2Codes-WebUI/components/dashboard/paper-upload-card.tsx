@@ -5,6 +5,7 @@ import { useState, useCallback } from "react"
 import { IconUpload, IconFileText, IconLoader, IconFile, IconAlertCircle, IconCheckCircle } from "@/components/ui/icons"
 import { useRecentPapers } from "@/lib/hooks/use-dashboard"
 import { uploadPaper, processPaper } from "@/lib/api/papers"
+import { getSelectedSkill } from "@/lib/skill-selection"
 import type { Paper } from "@/lib/api/types"
 
 const getPaperStatusLabel = (paper: Paper): string => {
@@ -76,7 +77,11 @@ export function PaperUploadCard() {
       setSuccess(`Successfully uploaded ${uploadedPaper.title || file.name}`)
       setUploadProgress(100)
 
-      processPaper(uploadedPaper.id).catch((err) => {
+      const selectedSkill = getSelectedSkill()
+      processPaper(uploadedPaper.id, {
+        skillId: selectedSkill?.skillId,
+        language: selectedSkill?.language,
+      }).catch((err) => {
         console.warn('Failed to trigger paper processing:', err)
       })
       
