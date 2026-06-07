@@ -945,7 +945,7 @@ impl App {
         frame.render_widget(admin_widget, chunks[1]);
     }
 
-    fn cycle_view_mode(&mut self) {
+    pub fn cycle_view_mode(&mut self) {
         self.view_mode = match self.view_mode {
             ViewMode::Dashboard => ViewMode::Tasks,
             ViewMode::Tasks => ViewMode::Modules,
@@ -1177,6 +1177,11 @@ impl App {
             },
         }
         Ok(())
+    }
+
+    /// Public rendering entry point, primarily for tests using a `TestBackend`.
+    pub fn draw(&mut self, frame: &mut Frame) {
+        self.render(frame)
     }
 
     fn render(&mut self, frame: &mut Frame) {

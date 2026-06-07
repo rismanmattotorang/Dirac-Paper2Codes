@@ -20,10 +20,10 @@ info "Building the engine (release-free check build)…"
 cargo build --quiet --manifest-path "$CORE/Cargo.toml"
 pass "engine builds"
 
-info "Running Rust unit + integration tests…"
+info "Running Rust unit + integration tests (incl. TUI render harness)…"
 cargo test --quiet --manifest-path "$CORE/Cargo.toml" \
-  --lib --test e2e_pipeline --test skills_e2e
-pass "all Rust tests pass"
+  --lib --test e2e_pipeline --test skills_e2e --test tui_render
+pass "all Rust tests pass (engine, pipeline, skills, TUI rendering)"
 
 BIN="$CORE/target/debug/paper2codes"
 
@@ -41,8 +41,21 @@ if [ -d "$WEBUI/node_modules" ]; then
   info "Web UI: type-check"
   (cd "$WEBUI" && npx tsc --noEmit -p tsconfig.json)
   pass "Web UI type-checks"
+
+  # Playwright UI tests (mock the backend; no API keys needed). Requires the
+  # browser binaries — install once with: npx playwright install chromium
+  if (cd "$WEBUI" && npx playwright --version >/dev/null 2>&1); then
+    info "Web UI: Playwright e2e tests"
+    if (cd "$WEBUI" && npx playwright test 2>/dev/null); then
+      pass "Web UI Playwright tests pass"
+    else
+      info "Web UI: Playwright tests skipped/failed (run 'npx playwright install chromium' first)"
+    fi
+  else
+    info "Web UI: Playwright not installed (run 'pnpm install' + 'npx playwright install chromium')"
+  fi
 else
-  info "Web UI: skipping type-check (run 'pnpm install' in Paper2Codes-WebUI first)"
+  info "Web UI: skipping (run 'pnpm install' in Paper2Codes-WebUI first)"
 fi
 
 echo
