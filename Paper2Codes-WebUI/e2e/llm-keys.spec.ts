@@ -23,10 +23,11 @@ test("validates a configured key via the Test button", async ({ page }) => {
 test("sets a configured provider as the default", async ({ page }) => {
   await openLlmTab(page)
   // OpenRouter is configured but not default → it offers "Set default".
+  // Match the badge exactly so it doesn't also match the "Set default" button.
   const card = page.getByTestId("provider-openrouter")
-  await expect(card.getByText("Default")).toHaveCount(0)
+  await expect(card.getByText("Default", { exact: true })).toHaveCount(0)
   await card.getByRole("button", { name: /Set default/i }).click()
-  await expect(card.getByText("Default")).toBeVisible()
+  await expect(card.getByText("Default", { exact: true })).toBeVisible()
 })
 
 test("saves a key for an unconfigured provider", async ({ page }) => {
