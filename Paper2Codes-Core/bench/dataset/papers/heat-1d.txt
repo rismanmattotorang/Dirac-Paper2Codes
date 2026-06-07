@@ -1,0 +1,23 @@
+Explicit Finite-Difference Solution of the 1D Heat Equation
+
+Abstract. We solve the one-dimensional heat (diffusion) equation using the
+forward-time centred-space (FTCS) explicit finite-difference scheme.
+
+1. Model. The 1D heat equation for temperature u(x, t) with diffusivity alpha is
+
+  Equation (1): du/dt = alpha * d^2u/dx^2
+
+2. Discretisation (Algorithm 1). On a grid with spacing dx and time step dt, the
+explicit update is
+
+  Equation (2): u_i^{n+1} = u_i^n + (alpha * dt / dx^2) * (u_{i+1}^n - 2 u_i^n + u_{i-1}^n)
+
+3. Stability. The scheme is stable only when the Courant-Friedrichs-Lewy (CFL)
+condition holds:
+
+  Equation (3): alpha * dt / dx^2 <= 0.5
+
+4. Implementation notes. The implementation should advance an initial profile by
+a number of steps with fixed (Dirichlet) boundary conditions, and should assert
+the CFL condition. Validate that total heat decreases or stays bounded and that
+the scheme is stable for the chosen dt.

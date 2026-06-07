@@ -1,0 +1,19 @@
+The Economic Order Quantity (EOQ) Inventory Model
+
+Abstract. The Economic Order Quantity model determines the order size that
+minimises the total annual inventory cost, balancing ordering cost against
+holding cost.
+
+1. Model. With annual demand D, fixed ordering cost per order S, and annual
+holding cost per unit H, the total cost as a function of order quantity Q is
+
+  Equation (1): TC(Q) = (D / Q) * S + (Q / 2) * H
+
+2. Optimum (Algorithm 1). Minimising TC over Q yields the closed-form optimal
+order quantity
+
+  Equation (2): Q* = sqrt(2 * D * S / H)
+
+3. Implementation notes. The implementation should compute Q* and the
+corresponding total cost, validating D, S, H > 0. Verify that TC(Q*) equals
+sqrt(2 * D * S * H) and that ordering cost equals holding cost at the optimum.

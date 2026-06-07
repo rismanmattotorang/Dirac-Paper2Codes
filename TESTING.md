@@ -70,7 +70,14 @@ benchmark (no external/licensed papers required):
 |---|---|---|
 | `black-scholes` | computational-finance | European option pricing |
 | `newton-sqrt` | computational-physics | Newton's method for √a |
+| `lennard-jones` | computational-chemistry | Lennard-Jones (12-6) potential |
+| `gc-content` | computational-biology-bioinformatics | GC content + reverse complement |
+| `kmer-count` | computational-genomics | k-mer counting |
 | `bell-state` | quantum-computation | Two-qubit Bell state |
+| `heat-1d` | computational-fluid-dynamics | 1D heat equation (explicit FTCS) |
+| `eoq` | computational-supply-chain | Economic Order Quantity |
+
+One case per built-in domain skill (8 total).
 
 Each case has a paper (`papers/*.txt`), an author-style reference repo
 (`refs/*/main.py`), and an entry in `manifest.json`. Scoring is reference-based

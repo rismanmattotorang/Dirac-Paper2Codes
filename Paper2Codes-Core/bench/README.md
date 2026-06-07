@@ -28,7 +28,18 @@ directory. See [`manifest.example.json`](manifest.example.json):
 }
 ```
 
-`reference_repo` and `rubric_path` are optional per case.
+`reference_repo`, `rubric_path`, and `skill_id` are optional per case.
+
+### Bundled dataset
+
+`bench/dataset/` ships a ready-to-run suite — one case per built-in domain skill
+(finance, physics, chemistry, biology/bioinformatics, genomics, quantum, CFD,
+supply chain) — each with a paper, an author-style reference repo, and a
+`skill_id`. Run it offline (no keys) with the stub generator:
+
+```bash
+paper2codes bench --manifest bench/dataset/manifest.json --offline
+```
 
 ## Running
 

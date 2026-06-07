@@ -58,15 +58,16 @@ async fn offline_benchmark_over_bundled_dataset() {
     // Run the whole benchmark harness offline over the curated dataset.
     let manifest = BenchmarkManifest::load(dataset_dir().join("manifest.json"))
         .expect("bundled manifest should load");
-    assert_eq!(manifest.cases.len(), 3);
+    let case_count = manifest.cases.len();
+    assert!(case_count >= 8, "dataset should cover at least 8 domains");
 
     let generator = OfflineStubGenerator::new("python");
     let report = run_benchmark(&manifest, &generator, None).await;
 
     // Every case ran, produced a repo, and was scored against its reference.
-    assert_eq!(report.aggregate.case_count, 3);
+    assert_eq!(report.aggregate.case_count, case_count);
     assert_eq!(report.aggregate.error_count, 0);
-    assert_eq!(report.aggregate.scored_count, 3);
+    assert_eq!(report.aggregate.scored_count, case_count);
 
     for case in &report.cases {
         // The stub emits `main.py`, which every reference repo also contains,

@@ -248,7 +248,10 @@ function ProviderCard({
     : "Enter API key"
 
   return (
-    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/50 p-4 space-y-3">
+    <div
+      data-testid={`provider-${provider.id}`}
+      className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/50 p-4 space-y-3"
+    >
       {/* Header row */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">

@@ -1,0 +1,17 @@
+GC Content and Reverse Complement of DNA Sequences
+
+Abstract. We describe two fundamental operations on DNA sequences: computing the
+GC content and forming the reverse complement.
+
+1. GC content. Given a DNA sequence S over the alphabet {A, C, G, T}, the GC
+content is the fraction of bases that are G or C:
+
+  Equation (1): GC(S) = (count(G) + count(C)) / length(S)
+
+2. Reverse complement. The complement maps A<->T and C<->G. The reverse
+complement reverses the sequence and complements each base.
+
+3. Implementation notes. The implementation should compute GC content as a value
+in [0, 1] and produce the reverse complement, handling upper/lower case and
+rejecting characters outside the nucleotide alphabet. Validate that the reverse
+complement of the reverse complement is the original sequence.

@@ -1,0 +1,16 @@
+k-mer Counting for Genomic Sequence Analysis
+
+Abstract. k-mer counting — tallying the occurrences of every length-k substring
+of a sequence — underpins genome assembly, error correction, and metagenomics.
+
+1. Definition. Given a sequence S of length n and an integer k, the k-mers are
+the n - k + 1 overlapping substrings of length k:
+
+  Equation (1): kmers(S, k) = { S[i : i + k] : 0 <= i <= n - k }
+
+2. Method (Algorithm 1). Slide a window of width k across S and increment a
+hash-map counter for each observed k-mer.
+
+3. Implementation notes. The implementation should return a mapping from each
+k-mer to its count, handle k > n (empty result) and k <= 0 (error), and stream
+the sequence in O(n) time. Validate that the counts sum to max(0, n - k + 1).
