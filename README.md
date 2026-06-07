@@ -304,7 +304,7 @@ Paper2Codes has been through comprehensive review and hardening:
 - [x] Query transformation (HyDE) + LLM reranking
 - [x] Corrective retrieval (CRAG) + self-consistency + self-debugging repair
 - [x] Reproducibility benchmark harness (`paper2codes bench`)
-- [ ] Graph-native retrieval over SurrealDB dependency graph
+- [x] Graph-native generation ordering + dependency expansion
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
 - [ ] Multi-paper synthesis
