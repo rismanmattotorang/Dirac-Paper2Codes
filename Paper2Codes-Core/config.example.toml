@@ -1,0 +1,359 @@
+# Paper2Codes Configuration Example
+# Copy this file to ~/.config/paper2codes/config.toml and customize
+
+# ==============================================================================
+# LLM Configuration
+# ==============================================================================
+[llm]
+# Default LLM provider (openrouter, openai, anthropic, xai)
+default_provider = "openai"
+
+
+openrouter_api_key = "sk-or-v1-..."  # or set OPENROUTER_API_KEY
+openai_api_key = "Your key here.."
+anthropic_api_key = "Your key here .."
+  
+# Request timeout in seconds
+timeout_seconds = 120
+
+# Maximum number of retries for failed requests
+max_retries = 3
+
+# Enable response caching to reduce costs
+enable_cache = true
+
+# Cache TTL in seconds (86400 = 24 hours)
+cache_ttl_seconds = 86400
+
+# Maximum cache entries
+max_cache_entries = 1000
+
+# ==============================================================================
+# LLM Provider Configurations
+# ==============================================================================
+
+[llm.providers.openrouter]
+enabled = true
+base_url = "https://openrouter.ai/api/v1"
+# Available models for different tasks
+models = [
+    "openai/gpt-4-turbo",
+    "anthropic/claude-3-opus-20240229",
+    "anthropic/claude-3-sonnet-20240229",
+    "x-ai/grok-2-1212",
+]
+
+[llm.providers.openai]
+enabled = true
+base_url = "https://api.openai.com/v1"
+models = [
+    "gpt-4-turbo-preview",
+    "gpt-4",
+    "gpt-3.5-turbo",
+]
+
+[llm.providers.anthropic]
+enabled = true
+base_url = "https://api.anthropic.com/v1"
+models = [
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+]
+
+[llm.providers.xai]
+enabled = false
+base_url = "https://api.x.ai/v1"
+models = [
+    "grok-2-1212",
+]
+
+# ==============================================================================
+# Agent Configuration
+# ==============================================================================
+[agents]
+# Model assignments for each agent type
+# Use models with long context for planning and analysis
+planning_model = "openai/gpt-4-turbo"
+analysis_model = "anthropic/claude-3-opus-20240229"
+coding_model = "openai/gpt-4-turbo"
+verification_model = "anthropic/claude-3-opus-20240229"
+
+# Maximum number of iterations before stopping
+max_iterations = 10
+
+# Number of parallel tasks to execute simultaneously
+# Adjust based on your system resources and API rate limits
+parallel_tasks = 4
+
+# Enable/disable specific agents
+enable_planning = true
+enable_analysis = true
+enable_coding = true
+enable_verification = true
+
+# Agent-specific parameters
+[agents.planning]
+temperature = 0.7
+max_tokens = 4000
+
+[agents.analysis]
+temperature = 0.5
+max_tokens = 3000
+
+[agents.coding]
+temperature = 0.3  # Lower temperature for more deterministic code
+max_tokens = 4000
+
+[agents.verification]
+temperature = 0.2  # Very low temperature for verification
+max_tokens = 2000
+
+# ==============================================================================
+# Retrieval Configuration (CPR Algorithm)
+# ==============================================================================
+[retrieval]
+# Enable embedding-based retrieval
+use_embeddings = true
+
+# Embedding provider (openai, voyage)
+embedding_provider = "openai"
+
+# Embedding model
+# OpenAI: text-embedding-3-large (3072 dims) or text-embedding-3-small (1536 dims)
+# Voyage: voyage-large-2 (1536 dims)
+embedding_model = "text-embedding-3-large"
+
+# Number of top contexts to retrieve
+top_k = 5
+
+# CPR algorithm weights
+alpha = 0.7   # Semantic similarity weight
+lambda = 0.3  # Keyword overlap weight
+delta = 0.5   # Algorithm match boost
+gamma = 0.4   # Already-implemented de-boost
+
+# Enable diversity filtering
+enable_diversity = true
+
+# Enable external reference retrieval
+retrieve_external_refs = true
+max_external_refs = 3
+
+# ==============================================================================
+# Verification Configuration (SACV Pipeline)
+# ==============================================================================
+[verification]
+# Enable/disable verification phases
+enable_static_checks = true
+enable_dynamic_tests = true
+enable_symbolic_verification = false  # Requires Z3
+
+# Static analysis settings
+[verification.static]
+# Check syntax, types, and basic correctness
+strict_mode = false
+check_types = true
+check_syntax = true
+check_style = false
+
+# Dynamic testing settings
+[verification.dynamic]
+# Run generated tests
+run_tests = true
+test_timeout_seconds = 60
+max_test_runs = 10
+
+# Symbolic verification settings (experimental)
+[verification.symbolic]
+# Use Z3 SMT solver for formal verification
+enable_z3 = false
+# Use SymPy for equation solving
+enable_sympy = false
+verification_timeout_seconds = 300
+
+# ==============================================================================
+# Execution Configuration
+# ==============================================================================
+[execution]
+# Sandbox type (docker, none)
+sandbox_type = "none"  # Set to "docker" for production
+
+# Execution timeout in seconds
+timeout_seconds = 300
+
+# Resource limits
+max_memory_mb = 2048
+max_cpu_percent = 50
+
+# Docker configuration (if sandbox_type = "docker")
+[execution.docker]
+image = "python:3.11-slim"
+network_mode = "none"  # Isolated from network
+read_only = false
+auto_remove = true
+
+# ==============================================================================
+# Storage Configuration (SurrealDB)
+# ==============================================================================
+[storage]
+# Enable persistent storage
+enabled = true
+
+# Connection string
+# WebSocket: ws://127.0.0.1:8000 (SurrealDB WebSocket endpoint)
+# Embedded: file://./data/surrealdb
+connection_string = "ws://127.0.0.1:8000"
+
+# Namespace and database
+namespace = "paper2codes"
+database = "main"
+
+# Authentication
+username = "root"
+password = "root"
+
+# Connection pool settings
+max_connections = 10
+connection_timeout_seconds = 30
+
+# Schema management
+auto_migrate = true
+
+# Vector store configuration
+# Use SurrealDB native vector search (recommended)
+# Or specify external vector DB (qdrant, pinecone, weaviate)
+vector_store_type = "surrealdb"  # Native SurrealDB vector search
+
+# External vector store (optional)
+# [storage.vector]
+# type = "qdrant"
+# url = "http://localhost:6333"
+# collection_name = "paper_segments"
+
+# ==============================================================================
+# API Server Configuration
+# ==============================================================================
+[api]
+# Enable API server
+enabled = false
+
+# Server host and port
+host = "127.0.0.1"
+port = 8080
+
+# CORS allowed origins (for WebUI integration)
+cors_origins = ["http://localhost:3000"]
+
+# Allow TUI to run alongside API server
+enable_tui = true
+
+# ==============================================================================
+# Document Processing Configuration
+# ==============================================================================
+[document]
+# Enable different extraction features
+extract_algorithms = true
+extract_equations = true
+extract_figures = false
+extract_tables = false
+extract_references = true
+
+# PDF processing settings
+[document.pdf]
+# Backend for PDF parsing (requires additional setup)
+backend = "none"  # Options: pdf-extract, none
+# If none, use text format instead
+
+# Segmentation settings
+[document.segmentation]
+min_segment_length = 100
+max_segment_length = 2000
+overlap_lines = 5
+
+# ==============================================================================
+# UI Configuration
+# ==============================================================================
+[ui]
+# Theme (dark, light)
+theme = "dark"
+
+# Refresh rate in milliseconds
+refresh_rate_ms = 100
+
+# Enable mouse support
+enable_mouse = true
+
+# Log display settings
+max_log_lines = 1000
+log_level = "info"  # trace, debug, info, warn, error
+
+# ==============================================================================
+# Paths Configuration
+# ==============================================================================
+[paths]
+# Directory for output repositories
+output_dir = "./output"
+
+# Directory for caching
+cache_dir = "~/.cache/paper2codes"
+
+# Directory for temporary files
+temp_dir = "/tmp/paper2codes"
+
+# Directory for logs
+log_dir = "~/.local/share/paper2codes/logs"
+
+# ==============================================================================
+# Performance Configuration
+# ==============================================================================
+[performance]
+# Enable parallel processing
+enable_parallel = true
+
+# Batch size for embedding generation
+embedding_batch_size = 64
+
+# Enable HTTP connection pooling
+enable_connection_pooling = true
+
+# Request rate limiting
+[performance.rate_limiting]
+enabled = false
+requests_per_minute = 60
+
+# ==============================================================================
+# Logging Configuration
+# ==============================================================================
+[logging]
+# Log level (trace, debug, info, warn, error)
+level = "info"
+
+# Log format (json, pretty, compact)
+format = "pretty"
+
+# Log to file
+log_to_file = true
+log_file_path = "~/.local/share/paper2codes/logs/paper2codes.log"
+
+# Log rotation
+max_log_file_size_mb = 100
+max_log_files = 10
+
+# Enable structured logging
+structured_logging = false
+
+# ==============================================================================
+# Advanced Configuration
+# ==============================================================================
+[advanced]
+# Enable experimental features
+enable_experimental = false
+
+# Debug mode
+debug_mode = false
+
+# Profile execution
+enable_profiling = false
+
+# Custom prompts directory (for prompt engineering)
+custom_prompts_dir = "~/.config/paper2codes/prompts"

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: paper2codes
+  labels:
+    name: paper2codes
+    environment: production
+

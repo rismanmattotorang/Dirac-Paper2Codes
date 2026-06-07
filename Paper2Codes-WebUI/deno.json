@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "strict": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "target": "esnext",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "tasks": {
+    "lint": "deno lint",
+    "fmt": "deno fmt",
+    "fmt:check": "deno fmt --check",
+    "typecheck": "deno check **/*.ts **/*.tsx",
+    "dev": "node node_modules/.bin/next dev",
+    "build": "node node_modules/.bin/next build",
+    "start": "node node_modules/.bin/next start"
+  },
+  "fmt": {
+    "files": {
+      "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs"],
+      "exclude": [".next", "node_modules", "dist", "out"]
+    },
+    "options": {
+      "useTabs": false,
+      "lineWidth": 100,
+      "indentWidth": 2,
+      "semiColons": true,
+      "singleQuote": false,
+      "proseWrap": "preserve"
+    }
+  },
+  "lint": {
+    "files": {
+      "include": ["**/*.ts", "**/*.tsx"],
+      "exclude": [".next", "node_modules", "dist", "out"]
+    },
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": ["no-unused-vars"]
+    }
+  }
+}
+

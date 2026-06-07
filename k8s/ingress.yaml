@@ -1,0 +1,111 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: paper2codes-ingress
+  namespace: paper2codes
+  annotations:
+    # Annotations depend on your ingress controller (nginx, traefik, etc.)
+    # Uncomment and adjust based on your setup
+    
+    # NGINX Ingress Controller
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    # nginx.ingress.kubernetes.io/websocket-services: "paper2codes-core"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # Rate limiting
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+    # nginx.ingress.kubernetes.io/limit-connections: "10"
+    
+    # Security headers
+    # nginx.ingress.kubernetes.io/configuration-snippet: |
+    #   more_set_headers "X-Frame-Options: DENY";
+    #   more_set_headers "X-Content-Type-Options: nosniff";
+    #   more_set_headers "X-XSS-Protection: 1; mode=block";
+    #   more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+spec:
+  ingressClassName: nginx  # Adjust based on your ingress controller
+  tls:
+  - hosts:
+    - paper2codes.example.com
+    - api.paper2codes.example.com
+    secretName: paper2codes-tls  # TLS certificate secret
+  rules:
+  # WebUI
+  - host: paper2codes.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: paper2codes-webui
+            port:
+              number: 3000
+  
+  # Backend API
+  - host: api.paper2codes.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: paper2codes-core
+            port:
+              number: 8080
+
+---
+# Alternative: Single domain with path-based routing
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: paper2codes-ingress-single
+#   namespace: paper2codes
+# spec:
+#   ingressClassName: nginx
+#   tls:
+#   - hosts:
+#     - paper2codes.example.com
+#     secretName: paper2codes-tls
+#   rules:
+#   - host: paper2codes.example.com
+#     http:
+#       paths:
+#       # API routes
+#       - path: /api
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: paper2codes-core
+#             port:
+#               number: 8080
+#       # WebSocket
+#       - path: /ws
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: paper2codes-core
+#             port:
+#               number: 8080
+#       # Metrics (should be protected)
+#       - path: /metrics
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: paper2codes-core
+#             port:
+#               number: 9090
+#       # WebUI (must be last)
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: paper2codes-webui
+#             port:
+#               number: 3000
+

@@ -1,0 +1,135 @@
+Title: QuickSort: A Fast Sorting Algorithm
+
+Authors: C.A.R. Hoare
+Year: 1962
+
+Abstract:
+This paper presents QuickSort, a fast sorting algorithm that uses a divide-and-conquer 
+strategy. The algorithm selects a pivot element and partitions the array around it, 
+then recursively sorts the subarrays. QuickSort has an average time complexity of 
+O(n log n) and is widely used in practice due to its efficiency and in-place operation.
+
+Keywords: sorting, algorithms, divide-and-conquer, quicksort, partitioning
+
+1. Introduction
+
+Sorting is one of the most fundamental operations in computer science. Many applications
+require data to be sorted for efficient searching, merging, and processing. This paper
+introduces QuickSort, an efficient comparison-based sorting algorithm.
+
+The key insight behind QuickSort is the partitioning process: by selecting a pivot
+element and rearranging the array so that elements smaller than the pivot come before it
+and elements larger come after it, we can recursively apply the same process to each
+subarray to achieve a fully sorted array.
+
+2. Algorithm Description
+
+The QuickSort algorithm consists of two main components: the partitioning function
+and the recursive sorting function.
+
+2.1 Partitioning
+
+Algorithm 1: Partition
+Input: Array A, indices low and high
+Output: Partition index
+
+procedure Partition(A, low, high):
+    pivot = A[high]
+    i = low - 1
+    for j = low to high - 1:
+        if A[j] <= pivot:
+            i = i + 1
+            swap A[i] with A[j]
+    swap A[i+1] with A[high]
+    return i + 1
+
+The partition function selects the last element as the pivot (other strategies exist)
+and rearranges the array so that all elements less than or equal to the pivot are on
+its left, and all elements greater are on its right.
+
+2.2 Recursive Sorting
+
+Algorithm 2: QuickSort
+Input: Array A, indices low and high
+Output: Sorted array A
+
+procedure QuickSort(A, low, high):
+    if low < high:
+        pi = Partition(A, low, high)
+        QuickSort(A, low, pi - 1)
+        QuickSort(A, pi + 1, high)
+
+The main QuickSort function recursively applies the partitioning process to subarrays
+until the entire array is sorted.
+
+3. Complexity Analysis
+
+The performance of QuickSort depends on the choice of pivot and the input distribution:
+
+- Best Case: O(n log n) - occurs when the pivot always splits the array into equal halves
+- Average Case: O(n log n) - expected performance for random input
+- Worst Case: O(n²) - occurs when the pivot is always the smallest or largest element
+
+Space Complexity: O(log n) for the recursion stack in the average case, O(n) in the worst case.
+
+The mathematical analysis shows that the expected number of comparisons C(n) satisfies:
+
+    C(n) = 2n ln n ≈ 1.39n log₂ n
+
+This makes QuickSort one of the fastest comparison-based sorting algorithms in practice.
+
+4. Optimizations
+
+Several optimizations can improve QuickSort's performance:
+
+1. Median-of-three pivot selection: Choose the median of the first, middle, and last elements
+2. Insertion sort for small subarrays: Switch to insertion sort when subarray size < 10
+3. Three-way partitioning: Handle duplicate elements efficiently
+4. Tail recursion elimination: Reduce stack space usage
+
+Algorithm 3: Optimized QuickSort
+Input: Array A, indices low and high
+Output: Sorted array A
+
+procedure OptimizedQuickSort(A, low, high):
+    while low < high:
+        if high - low < 10:
+            InsertionSort(A, low, high)
+            break
+        pi = MedianOfThree(A, low, high)
+        pi = Partition(A, low, high)
+        if pi - low < high - pi:
+            OptimizedQuickSort(A, low, pi - 1)
+            low = pi + 1
+        else:
+            OptimizedQuickSort(A, pi + 1, high)
+            high = pi - 1
+
+5. Implementation Considerations
+
+When implementing QuickSort, consider:
+
+- In-place sorting: QuickSort can sort the array without additional memory
+- Stability: Standard QuickSort is not stable, but stable variants exist
+- Parallelization: The recursive structure allows parallel execution
+- Cache efficiency: Good locality of reference for modern CPUs
+
+6. Experimental Results
+
+Experiments on various datasets show that QuickSort outperforms other O(n²) algorithms
+by a significant margin and competes favorably with other O(n log n) algorithms like
+MergeSort and HeapSort. On random data, QuickSort is typically 2-3 times faster than
+MergeSort due to better cache locality.
+
+7. Conclusion
+
+QuickSort is a highly efficient sorting algorithm that combines elegant simplicity
+with excellent practical performance. Its divide-and-conquer approach and in-place
+operation make it a preferred choice for many applications. The algorithm's recursive
+structure also makes it amenable to various optimizations and parallel implementations.
+
+References:
+
+[1] Hoare, C. A. R. (1962). "Quicksort". The Computer Journal. 5 (1): 10–16.
+[2] Knuth, D. E. (1998). The Art of Computer Programming, Volume 3: Sorting and Searching.
+[3] Sedgewick, R. (1978). "Implementing Quicksort programs". Communications of the ACM. 21 (10): 847–857.

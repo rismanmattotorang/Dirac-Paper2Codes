@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # SurrealDB database
+  surreal:
+    image: surrealdb/surrealdb:latest
+    container_name: paper2codes-surreal
+    ports:
+      - "8000:8000"
+    command: start --log trace --user root --pass root memory
+    volumes:
+      - surreal-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paper2codes-network
+    restart: unless-stopped
+
+  # Paper2Codes Core API
+  core:
+    build:
+      context: ./Paper2Codes-Core
+      dockerfile: Dockerfile
+    container_name: paper2codes-core
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=ws://surreal:8000
+      - DATABASE_NAMESPACE=paper2codes
+      - DATABASE_NAME=main
+      - DATABASE_USER=root
+      - DATABASE_PASS=root
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+      - CORS_ORIGINS=http://localhost:3000,http://webui:3000
+    env_file:
+      - .env
+    volumes:
+      - core-data:/app/data
+    depends_on:
+      surreal:
+        condition: service_healthy
+    networks:
+      - paper2codes-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Paper2Codes WebUI
+  webui:
+    build:
+      context: ./Paper2Codes-WebUI
+      dockerfile: Dockerfile
+    container_name: paper2codes-webui
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws
+      - NEXT_PUBLIC_ENABLE_ANALYTICS=true
+      - NEXT_PUBLIC_ENABLE_REAL_TIME=true
+    depends_on:
+      core:
+        condition: service_healthy
+    networks:
+      - paper2codes-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prometheus for metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: paper2codes-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - paper2codes-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana for dashboards (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: paper2codes-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - paper2codes-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  surreal-data:
+    driver: local
+  core-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  paper2codes-network:
+    driver: bridge
+

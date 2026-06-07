@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paper2codes-config
+  namespace: paper2codes
+data:
+  # API Server
+  API_HOST: "0.0.0.0"
+  API_PORT: "8080"
+  CORS_ORIGINS: "https://paper2codes.example.com"
+  
+  # Database
+  DATABASE_URL: "ws://surreal:8000"
+  DATABASE_NAMESPACE: "paper2codes"
+  DATABASE_NAME: "main"
+  DATABASE_USER: "root"
+  DATABASE_AUTO_MIGRATE: "true"
+  
+  # LLM
+  DEFAULT_LLM_PROVIDER: "openrouter"
+  PLANNING_MODEL: "openai/gpt-4-turbo"
+  ANALYSIS_MODEL: "anthropic/claude-3-opus-20240229"
+  CODING_MODEL: "openai/gpt-4-turbo"
+  VERIFICATION_MODEL: "anthropic/claude-3-opus-20240229"
+  
+  # Agent Configuration
+  MAX_AGENT_ITERATIONS: "10"
+  PARALLEL_TASKS: "4"
+  
+  # Performance
+  MEMORY_PROFILE: "auto"
+  ENABLE_CACHING: "true"
+  CACHE_SIZE: "1000"
+  
+  # Monitoring
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  METRICS_ENABLED: "true"
+  
+  # Features
+  FEATURE_DOMAIN_DETECTION: "true"
+  FEATURE_GITHUB_INTEGRATION: "true"
+  FEATURE_ITERATIVE_AGENTS: "true"
+  
+  # Environment
+  ENVIRONMENT: "production"
+  SERVICE_NAME: "paper2codes-core"
+  SERVICE_VERSION: "0.1.0"
+

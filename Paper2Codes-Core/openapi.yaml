@@ -1,0 +1,1159 @@
+openapi: 3.0.3
+info:
+  title: Paper2Codes API
+  version: 1.0.0
+  description: |
+    RESTful API for Paper2Codes - A neuro-symbolic RAG framework for automated code generation from scientific literature.
+    
+    This API provides endpoints for:
+    - Paper management and processing
+    - Code generation and repository management
+    - Task tracking and monitoring
+    - Real-time updates via WebSocket
+    - Analytics and metrics
+  contact:
+    name: Paper2Codes Team
+    url: https://github.com/yourusername/Paper2Codes
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.paper2codes.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check and system status
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Papers
+    description: Paper management and processing
+  - name: Repositories
+    description: Code repository management
+  - name: Tasks
+    description: Task tracking and monitoring
+  - name: Files
+    description: File upload and management
+  - name: Search
+    description: Advanced search capabilities
+  - name: Analytics
+    description: Analytics and performance metrics
+  - name: Streaming
+    description: Server-Sent Events (SSE) streaming endpoints
+  - name: WebSocket
+    description: WebSocket real-time communication
+
+paths:
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check API server health and readiness
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Server is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Refresh JWT access token using refresh token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Get information about the currently authenticated user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers:
+    get:
+      tags:
+        - Papers
+      summary: List papers
+      description: Get a paginated list of papers
+      operationId: listPapers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: status
+          in: query
+          description: Filter by processing status
+          schema:
+            type: string
+            enum: [uploaded, processing, processed, failed]
+        - name: domain
+          in: query
+          description: Filter by domain
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of papers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Paper'
+    post:
+      tags:
+        - Papers
+      summary: Create paper
+      description: Create a new paper entry
+      operationId: createPaper
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaperRequest'
+      responses:
+        '201':
+          description: Paper created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Paper'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers/{id}:
+    get:
+      tags:
+        - Papers
+      summary: Get paper by ID
+      description: Get detailed information about a specific paper
+      operationId: getPaper
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaperIdParam'
+      responses:
+        '200':
+          description: Paper details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Paper'
+        '404':
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Papers
+      summary: Update paper
+      description: Update paper information
+      operationId: updatePaper
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaperIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaperRequest'
+      responses:
+        '200':
+          description: Paper updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Paper'
+        '404':
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Papers
+      summary: Delete paper
+      description: Delete a paper and all associated data
+      operationId: deletePaper
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaperIdParam'
+      responses:
+        '204':
+          description: Paper deleted successfully
+        '404':
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers/upload:
+    post:
+      tags:
+        - Papers
+      summary: Upload paper file
+      description: Upload a PDF or text file for processing
+      operationId: uploadPaper
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF or text file
+                title:
+                  type: string
+                  description: Optional paper title
+      responses:
+        '201':
+          description: Paper uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Paper'
+        '400':
+          description: Invalid file format or size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers/{id}/process:
+    post:
+      tags:
+        - Papers
+      summary: Process paper
+      description: Start processing a paper (parse, segment, extract)
+      operationId: processPaper
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaperIdParam'
+      responses:
+        '202':
+          description: Processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+        '404':
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers/{id}/status:
+    get:
+      tags:
+        - Papers
+      summary: Get processing status
+      description: Get the current processing status of a paper
+      operationId: getProcessingStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaperIdParam'
+      responses:
+        '200':
+          description: Processing status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProcessingStatus'
+        '404':
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers/{id}/segments:
+    get:
+      tags:
+        - Papers
+      summary: Get paper segments
+      description: Get all segments extracted from a paper
+      operationId: getPaperSegments
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaperIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: List of paper segments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaperSegment'
+        '404':
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/papers/search:
+    post:
+      tags:
+        - Papers
+      summary: Semantic search papers
+      description: Perform semantic search across papers
+      operationId: searchPapers
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SemanticSearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SearchResult'
+        '400':
+          description: Invalid search query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/repositories:
+    get:
+      tags:
+        - Repositories
+      summary: List repositories
+      description: Get a paginated list of code repositories
+      operationId: listRepositories
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: List of repositories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Repository'
+    post:
+      tags:
+        - Repositories
+      summary: Create repository
+      description: Create a new code repository
+      operationId: createRepository
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRepositoryRequest'
+      responses:
+        '201':
+          description: Repository created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Repository'
+
+  /api/repositories/{id}:
+    get:
+      tags:
+        - Repositories
+      summary: Get repository by ID
+      description: Get detailed information about a repository
+      operationId: getRepository
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RepositoryIdParam'
+      responses:
+        '200':
+          description: Repository details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Repository'
+        '404':
+          description: Repository not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/tasks:
+    get:
+      tags:
+        - Tasks
+      summary: List tasks
+      description: Get a paginated list of tasks
+      operationId: listTasks
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: status
+          in: query
+          description: Filter by task status
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled]
+        - name: task_type
+          in: query
+          description: Filter by task type
+          schema:
+            type: string
+            enum: [planning, analysis, coding, verification]
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+
+  /api/tasks/{id}:
+    get:
+      tags:
+        - Tasks
+      summary: Get task by ID
+      description: Get detailed information about a task
+      operationId: getTask
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/analytics/overview:
+    get:
+      tags:
+        - Analytics
+      summary: Get analytics overview
+      description: Get high-level analytics and metrics
+      operationId: getAnalyticsOverview
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AnalyticsOverview'
+
+  /api/analytics/performance:
+    get:
+      tags:
+        - Analytics
+      summary: Get performance metrics
+      description: Get detailed performance metrics
+      operationId: getPerformanceMetrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PerformanceMetrics'
+
+  /api/search:
+    post:
+      tags:
+        - Search
+      summary: Advanced search
+      description: Perform advanced search across papers, repositories, and modules
+      operationId: advancedSearch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvancedSearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SearchResult'
+
+  /ws:
+    get:
+      tags:
+        - WebSocket
+      summary: WebSocket connection
+      description: |
+        Establish a WebSocket connection for real-time updates.
+        
+        Query parameters:
+        - `token`: JWT authentication token
+        - `channels`: Comma-separated list of channels to subscribe to (e.g., `tasks,papers:123`)
+        
+        Message format:
+        ```json
+        {
+          "type": "task_update",
+          "channel": "tasks",
+          "data": { ... },
+          "timestamp": "2024-01-01T00:00:00Z"
+        }
+        ```
+      operationId: websocketConnect
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: channels
+          in: query
+          schema:
+            type: string
+            description: Comma-separated channel list
+      responses:
+        '101':
+          description: Switching protocols to WebSocket
+        '401':
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/auth/login
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number (1-indexed)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPageParam:
+      name: per_page
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    PaperIdParam:
+      name: id
+      in: path
+      required: true
+      description: Paper ID
+      schema:
+        type: string
+        format: uuid
+    RepositoryIdParam:
+      name: id
+      in: path
+      required: true
+      description: Repository ID
+      schema:
+        type: string
+        format: uuid
+    TaskIdParam:
+      name: id
+      in: path
+      required: true
+      description: Task ID
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        uptime_seconds:
+          type: number
+
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    PaginatedResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            pagination:
+              $ref: '#/components/schemas/PaginationMeta'
+
+    ResponseMeta:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        request_id:
+          type: string
+          format: uuid
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+        has_more:
+          type: boolean
+        next_cursor:
+          type: string
+          nullable: true
+        prev_cursor:
+          type: string
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    ErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Invalid input
+        details:
+          type: object
+          additionalProperties: true
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+        token_type:
+          type: string
+          example: Bearer
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Paper:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        abstract_text:
+          type: string
+        status:
+          type: string
+          enum: [uploaded, processing, processed, failed]
+        domain:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreatePaperRequest:
+      type: object
+      required:
+        - title
+        - abstract_text
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        abstract_text:
+          type: string
+          maxLength: 10000
+        content:
+          type: string
+          nullable: true
+
+    UpdatePaperRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        abstract_text:
+          type: string
+          maxLength: 10000
+
+    PaperSegment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paper_id:
+          type: string
+          format: uuid
+        section:
+          type: string
+        content:
+          type: string
+        segment_type:
+          type: string
+          enum: [abstract, introduction, methodology, algorithm, experiment, results, conclusion, other]
+        line_range:
+          type: array
+          items:
+            type: integer
+          minItems: 2
+          maxItems: 2
+
+    ProcessingStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [uploaded, processing, processed, failed]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        current_step:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    SemanticSearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        k:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+        paper_id:
+          type: string
+          format: uuid
+          nullable: true
+        segment_type:
+          type: string
+          nullable: true
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [paper, segment, repository, module]
+        score:
+          type: number
+        content:
+          type: object
+          additionalProperties: true
+
+    Repository:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paper_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        language:
+          type: string
+        status:
+          type: string
+          enum: [generating, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateRepositoryRequest:
+      type: object
+      required:
+        - name
+        - language
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        language:
+          type: string
+        paper_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_type:
+          type: string
+          enum: [planning, analysis, coding, verification]
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        paper_id:
+          type: string
+          format: uuid
+          nullable: true
+        module_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AnalyticsOverview:
+      type: object
+      properties:
+        total_papers:
+          type: integer
+        total_repositories:
+          type: integer
+        total_tasks:
+          type: integer
+        active_tasks:
+          type: integer
+        success_rate:
+          type: number
+        average_processing_time:
+          type: number
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        request_rate:
+          type: number
+        average_response_time:
+          type: number
+        p95_response_time:
+          type: number
+        p99_response_time:
+          type: number
+        error_rate:
+          type: number
+        active_connections:
+          type: integer
+
+    AdvancedSearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        filters:
+          type: object
+          additionalProperties: true
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+

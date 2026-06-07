@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: surreal-pvc
+  namespace: paper2codes
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard  # Adjust based on your cluster
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: surreal
+  namespace: paper2codes
+  labels:
+    app: surreal
+    component: database
+spec:
+  replicas: 1  # SurrealDB single instance for now
+  selector:
+    matchLabels:
+      app: surreal
+  template:
+    metadata:
+      labels:
+        app: surreal
+        component: database
+    spec:
+      containers:
+      - name: surreal
+        image: surrealdb/surrealdb:latest
+        args:
+          - start
+          - --log
+          - info
+          - --user
+          - root
+          - --pass
+          - $(DATABASE_PASS)
+          - file://data/surrealdb
+        env:
+        - name: DATABASE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: paper2codes-secrets
+              key: DATABASE_PASS
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: surreal-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: surreal
+  namespace: paper2codes
+  labels:
+    app: surreal
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: surreal
+

@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+ARCHITECTURE.md
+INTEGRATION.md
+SPECS.md
+STRUCTURE.md
+TODO.md
+PHASE7_SUMMARY.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+target/
+dist/
+build/
+*.o
+*.so
+*.dylib
+
+# Dependencies
+node_modules/
+Cargo.lock
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test files
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Misc
+*.tex
+*.pdf
+
