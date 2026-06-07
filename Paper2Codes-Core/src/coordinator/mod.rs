@@ -160,7 +160,31 @@ impl TaskQueue {
 impl Coordinator {
     pub async fn new(config: Config) -> Result<Self> {
         let llm_router = Arc::new(LLMRouter::new(config.clone())?);
-        let cpr_engine: Arc<dyn CPREngine> = Arc::new(DefaultCPREngine::new());
+
+        // Build the CPR engine, wiring optional Phase 3 augmentation when the
+        // required services are available. These are capability-gated feature
+        // flags: dense retrieval + HyDE activate only with an embedding key, and
+        // HyDE / reranking activate only with an LLM client. Without them,
+        // retrieval falls back to the Phase 1/2 BM25 + RRF hybrid pipeline.
+        let mut engine = DefaultCPREngine::new();
+        if let Some(openai_key) = config.get_api_key("openai") {
+            match crate::retrieval::EmbeddingService::new_openai(openai_key) {
+                Ok(service) => {
+                    engine = engine.with_embedding_service(Arc::new(service));
+                    tracing::info!("CPR: dense embedding retrieval enabled (OpenAI)");
+                }
+                Err(e) => tracing::warn!("CPR: embedding service unavailable: {}", e),
+            }
+        }
+        if let Some(client) = llm_router.default_client() {
+            engine = engine
+                .with_query_expander(Arc::new(crate::retrieval::LlmQueryExpander::new(
+                    client.clone(),
+                )))
+                .with_reranker(Arc::new(crate::retrieval::LlmReranker::new(client)));
+            tracing::info!("CPR: HyDE query expansion + LLM reranking enabled");
+        }
+        let cpr_engine: Arc<dyn CPREngine> = Arc::new(engine);
 
         // Initialize storage manager if storage is enabled
         let mut storage_manager = None;
