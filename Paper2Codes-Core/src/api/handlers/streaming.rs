@@ -363,7 +363,7 @@ pub async fn stream_llm_response(
         return Sse::new(stream).keep_alive(keep_alive);
     }
 
-    let router = match LLMRouter::new((*state.config).clone()) {
+    let router = match LLMRouter::new(state.effective_config().await) {
         Ok(router) => router,
         Err(e) => {
             error!("Failed to initialize LLM router: {}", e);

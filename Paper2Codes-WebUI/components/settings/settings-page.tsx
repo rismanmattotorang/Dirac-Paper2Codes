@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { settingsApi, type SettingsResponse, type UpdateSettingsRequest } from "@/lib/api/settings"
 import { useToast } from "@/hooks/use-toast"
+import { ApiKeysPanel } from "@/components/settings/api-keys-panel"
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general")
@@ -353,121 +354,17 @@ function NotificationSettings({ settings, setSettings }: {
   )
 }
 
-function LLMSettings({ settings, setSettings }: { 
-  settings: SettingsResponse; 
-  setSettings: React.Dispatch<React.SetStateAction<SettingsResponse | null>> 
+function LLMSettings({ settings, setSettings }: {
+  settings: SettingsResponse;
+  setSettings: React.Dispatch<React.SetStateAction<SettingsResponse | null>>
 }) {
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
-  const { toast } = useToast()
-
-  const handleSaveApiKey = async (provider: string, apiKey: string) => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "Error",
-        description: "API key cannot be empty",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      await settingsApi.updateSettings({
-        llm: {
-          primary_provider: provider, // Always include provider to ensure API key is set for correct provider
-          api_key: apiKey,
-        }
-      })
-      toast({
-        title: "Success",
-        description: `${provider} API key saved successfully`,
-      })
-      // Clear the input field
-      setApiKeys(prev => ({ ...prev, [provider]: "" }))
-      // Reload settings to update status
-      window.location.reload()
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: `Failed to save ${provider} API key`,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const providers = [
-    { id: "openai", name: "OpenAI", placeholder: "sk-proj-..." },
-    { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-..." },
-    { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-..." },
-    { id: "xai", name: "xAI (Grok)", placeholder: "xai-..." },
-  ]
-
   return (
     <div className="space-y-6">
-      <div>
-        <label className="block text-sm font-semibold text-neutral-900 dark:text-white mb-2">
-          Primary LLM Provider
-        </label>
-        <select 
-          className="input-base w-full"
-          value={settings.llm.primary_provider}
-          onChange={(e) => setSettings(prev => prev ? {
-            ...prev,
-            llm: { ...prev.llm, primary_provider: e.target.value }
-          } : null)}
-        >
-          <option value="openai">OpenAI (Default)</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="openrouter">OpenRouter</option>
-          <option value="xai">xAI (Grok)</option>
-        </select>
-      </div>
+      {/* Provider keys are managed live (set/test/remove/default) by this panel
+          and take effect immediately, independent of the Save Changes button. */}
+      <ApiKeysPanel />
 
-      <div>
-        <label className="block text-sm font-semibold text-neutral-900 dark:text-white mb-3">
-          API Keys
-        </label>
-        <div className="space-y-4">
-          {providers.map((provider) => {
-            const isConfigured = provider.id === settings.llm.primary_provider 
-              ? settings.llm.api_key_configured 
-              : false // TODO: Check all providers' status
-            
-            return (
-              <div key={provider.id} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-neutral-900 dark:text-white">
-                    {provider.name} {isConfigured && <span className="text-green-600 dark:text-green-400">✓</span>}
-                  </label>
-                  {provider.id === settings.llm.primary_provider && (
-                    <span className="text-xs text-blue-600 dark:text-blue-400">(Active)</span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    className="input-base flex-1"
-                    placeholder={provider.placeholder}
-                    value={apiKeys[provider.id] || ""}
-                    onChange={(e) => setApiKeys(prev => ({ ...prev, [provider.id]: e.target.value }))}
-                  />
-                  <button
-                    className="btn-primary px-4"
-                    onClick={() => handleSaveApiKey(provider.id, apiKeys[provider.id] || "")}
-                    disabled={!apiKeys[provider.id]?.trim()}
-                  >
-                    Save
-                  </button>
-                </div>
-                {isConfigured && !apiKeys[provider.id] && (
-                  <p className="text-xs text-green-600 dark:text-green-400">API key is configured</p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="border-t border-neutral-200 dark:border-neutral-700 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-semibold text-neutral-900 dark:text-white mb-2">
             Temperature: {settings.llm.temperature}

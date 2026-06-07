@@ -113,6 +113,10 @@ impl ApiServer {
                 .route(
                     "/api/settings",
                     get(crate::api::handlers::settings::get_settings),
+                )
+                .route(
+                    "/api/settings/llm/providers",
+                    get(crate::api::handlers::llm_keys::list_providers),
                 );
         }
 
@@ -202,6 +206,22 @@ impl ApiServer {
                 .route(
                     "/api/settings",
                     put(crate::api::handlers::settings::update_settings),
+                )
+                .route(
+                    "/api/settings/llm/providers/:provider/key",
+                    put(crate::api::handlers::llm_keys::set_provider_key),
+                )
+                .route(
+                    "/api/settings/llm/providers/:provider/key",
+                    delete(crate::api::handlers::llm_keys::delete_provider_key),
+                )
+                .route(
+                    "/api/settings/llm/providers/:provider/test",
+                    post(crate::api::handlers::llm_keys::test_provider_key),
+                )
+                .route(
+                    "/api/settings/llm/default",
+                    put(crate::api::handlers::llm_keys::set_default_provider),
                 )
                 .route(
                     "/api/settings/security/sessions/:id",

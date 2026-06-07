@@ -1,5 +1,6 @@
 # Rust
 /target
+**/target/
 **/*.rs.bk
 *.pdb
 
@@ -46,6 +47,7 @@ deno.lock
 .next/
 out/
 build/
+*.tsbuildinfo
 
 # Node.js (for Next.js runtime)
 node_modules/

@@ -137,7 +137,8 @@ pub async fn get_settings(
 ) -> Result<Json<SettingsResponse>> {
     info!("Fetching current settings");
 
-    let config = &state.config;
+    // Use the effective config so runtime API-key/provider overrides are reflected.
+    let config = state.effective_config().await;
 
     // Build settings response from current config
     let settings = SettingsResponse {
@@ -226,8 +227,8 @@ pub async fn update_settings(
 ) -> Result<Json<SettingsResponse>> {
     info!("Updating settings");
 
-    // Update in-memory config
-    let mut config = (*state.config).clone();
+    // Start from the effective config (bootstrap + current runtime overrides).
+    let mut config = state.effective_config().await;
     let mut config_changed = false;
 
     if let Some(llm_update) = &request.llm {
@@ -243,6 +244,9 @@ pub async fn update_settings(
                             config.llm.default_provider, new_provider
                         );
                         config.llm.default_provider = new_provider.clone();
+                        // Mirror into the runtime override store so the change is live.
+                        state.llm_overrides.write().await.default_provider =
+                            Some(new_provider.clone());
                         config_changed = true;
                     }
                     new_provider.clone()
@@ -274,6 +278,13 @@ pub async fn update_settings(
             if let Some(provider) = config.llm.providers.get_mut(&target_provider) {
                 provider.api_key = Some(api_key.clone());
                 provider.enabled = true; // Enable provider when API key is set
+                // Mirror into the runtime override store so the key is live immediately.
+                state
+                    .llm_overrides
+                    .write()
+                    .await
+                    .api_keys
+                    .insert(target_provider.clone(), Some(api_key.clone()));
                 info!("API key updated for provider: {}", target_provider);
                 config_changed = true;
             } else {
@@ -331,17 +342,11 @@ pub async fn update_settings(
         }
     }
 
-    // Update the config in AppState and persist to disk
+    // Persist the merged configuration to disk. LLM API-key and default-provider
+    // changes are also mirrored into the runtime override store above, so they
+    // take effect immediately; other settings take effect on the next restart.
     if config_changed {
-        // Save config to file
-        let config_path = dirs::config_dir()
-            .ok_or_else(|| {
-                crate::error::Paper2CodesError::Config(crate::error::ConfigError::NotFound(
-                    "config directory".to_string(),
-                ))
-            })?
-            .join("paper2codes")
-            .join("config.toml");
+        let config_path = crate::api::state::config_file_path()?;
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
@@ -366,10 +371,22 @@ pub async fn update_settings(
             )))
         })?;
 
-        info!("Configuration saved to {}", config_path.display());
+        // The config file can hold plaintext API keys — restrict its permissions.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) =
+                std::fs::set_permissions(&config_path, std::fs::Permissions::from_mode(0o600))
+            {
+                tracing::warn!(
+                    "Failed to tighten permissions on {}: {}",
+                    config_path.display(),
+                    e
+                );
+            }
+        }
 
-        // Note: Config changes require backend restart to fully take effect
-        // For API keys, we can update the provider config in-memory, but a restart is recommended
+        info!("Configuration saved to {}", config_path.display());
     }
 
     // Return updated settings based on the modified config
