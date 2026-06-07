@@ -123,6 +123,18 @@ impl Skill {
         out
     }
 
+    /// Augment a task description with this skill's domain guidance for the
+    /// chosen language. The result is fed to the coding agent (driving
+    /// generation) and to the retriever (the added domain terms bias CPR).
+    pub fn augment_task(&self, base_description: &str, language: &str) -> String {
+        format!(
+            "{}\n\n--- Domain guidance ({}) ---\n{}",
+            base_description,
+            self.name,
+            self.system_prompt(language)
+        )
+    }
+
     /// Validate a skill's required fields (used on user upsert / load).
     pub fn validate(&self) -> Result<()> {
         if self.id.trim().is_empty() {
@@ -327,6 +339,14 @@ mod tests {
         assert!(prompt.contains("Test Domain"));
         assert!(prompt.contains("numpy, scipy"));
         assert!(prompt.contains("energy is conserved"));
+    }
+
+    #[test]
+    fn augment_task_prepends_base_and_adds_guidance() {
+        let augmented = sample().augment_task("Implement module X", "python");
+        assert!(augmented.starts_with("Implement module X"));
+        assert!(augmented.contains("Domain guidance (Test Domain)"));
+        assert!(augmented.contains("numpy"));
     }
 
     #[test]

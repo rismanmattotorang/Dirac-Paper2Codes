@@ -11,9 +11,11 @@ use crate::storage::filters::SearchFilters;
 use crate::types::{Paper, PaperSegment};
 /// Phase 3: Paper Processing API endpoints
 /// This module implements the Phase 3 endpoints as specified in INTEGRATION.md
-use axum::extract::{Extension, Multipart, Path};
+use crate::skills::{Skill, SkillRegistry};
+use axum::extract::{Extension, Multipart, Path, Query};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Json;
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
@@ -231,12 +233,49 @@ pub async fn upload_paper(
 
 /// Process a paper (parse, segment, extract, classify, generate embeddings)
 /// POST /api/papers/:id/process
+/// Query parameters for `POST /api/papers/:id/process`. The Web UI passes the
+/// user's selected domain skill + target language so the chosen skill drives
+/// generation.
+#[derive(Debug, Deserialize, Default)]
+pub struct ProcessParams {
+    #[serde(default)]
+    pub skill_id: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+/// Resolve a skill id against the effective registry (built-ins + user skills).
+fn resolve_skill(skill_id: &str) -> Option<Skill> {
+    let mut registry = SkillRegistry::with_builtins();
+    if let Ok(dir) = SkillRegistry::user_skills_dir() {
+        let _ = registry.load_user_dir(&dir);
+    }
+    registry.get(skill_id).cloned()
+}
+
 pub async fn process_paper(
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(params): Query<ProcessParams>,
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<ProcessingStatusResponse>>, (StatusCode, Json<serde_json::Value>)> {
     let request_id = get_request_id(&headers);
+
+    // Resolve the selected domain skill (if any) up front so a bad id is a 400.
+    let profile: Option<(Skill, Option<String>)> = match params.skill_id.as_deref() {
+        Some(skill_id) if !skill_id.is_empty() => match resolve_skill(skill_id) {
+            Some(skill) => Some((skill, params.language.clone())),
+            None => {
+                return Err(error_response(
+                    StatusCode::BAD_REQUEST,
+                    "UNKNOWN_SKILL",
+                    &format!("Unknown domain skill '{}'", skill_id),
+                    request_id,
+                ));
+            }
+        },
+        _ => None,
+    };
 
     if !state.config.storage.enabled {
         return Err(error_response(
@@ -298,8 +337,13 @@ pub async fn process_paper(
         .await;
     }
 
+    if let Some((skill, _)) = &profile {
+        info!(request_id = %request_id, paper_id = %id, skill = %skill.id, "Processing with domain skill");
+    }
+
     tokio::spawn(async move {
-        let _ = process_paper_background(state_clone, paper, paper_id, request_id_clone).await;
+        let _ = process_paper_background(state_clone, paper, paper_id, request_id_clone, profile)
+            .await;
     });
 
     // Return immediately with pending status
@@ -322,6 +366,7 @@ async fn process_paper_background(
     mut paper: Paper,
     paper_id: String,
     request_id: String,
+    profile: Option<(Skill, Option<String>)>,
 ) -> crate::error::Result<()> {
     use crate::domain::detector::DomainDetector;
 
@@ -544,6 +589,9 @@ async fn process_paper_background(
                 .await;
             }
 
+            // Skill-driven code generation (gated by LLM key availability).
+            maybe_generate_with_skill(&state, &paper, &paper_id, profile, &request_id).await;
+
             Ok(())
         }
         Err(e) => {
@@ -563,6 +611,86 @@ async fn process_paper_background(
             }
 
             Err(e)
+        }
+    }
+}
+
+/// Run skill-guided code generation, gated by LLM key availability.
+///
+/// With a provider key configured, this builds a coordinator, applies the chosen
+/// domain-skill generation profile, generates a repository, and persists it.
+/// Without a key (e.g. offline), it is a no-op so paper parsing/storage still
+/// succeed — the chosen skill is honoured the moment keys are present.
+async fn maybe_generate_with_skill(
+    state: &Arc<AppState>,
+    paper: &Paper,
+    paper_id: &str,
+    profile: Option<(Skill, Option<String>)>,
+    request_id: &str,
+) {
+    let config = state.effective_config().await;
+    let default_provider = config.llm.default_provider.clone();
+    if config.get_api_key(&default_provider).is_none() {
+        info!(
+            request_id = %request_id, paper_id = %paper_id,
+            "Skipping code generation: no LLM API key configured (paper parsed and stored)"
+        );
+        return;
+    }
+
+    info!(request_id = %request_id, paper_id = %paper_id, "Starting skill-guided code generation");
+    let _ = broadcast::broadcast_paper_processed(
+        state,
+        paper_id,
+        "generating",
+        paper.segments.len(),
+        Some("Generating code from paper".to_string()),
+    )
+    .await;
+
+    let mut coordinator = match crate::coordinator::Coordinator::new(config).await {
+        Ok(c) => c,
+        Err(e) => {
+            error!(request_id = %request_id, paper_id = %paper_id, error = %e, "Failed to initialise coordinator");
+            return;
+        }
+    };
+    if let Some((skill, language)) = profile {
+        coordinator.set_generation_profile(Some(skill), language);
+    }
+    coordinator.set_output_path(PathBuf::from(format!("./output/{}", paper_id)));
+
+    match coordinator.process_paper(paper.clone()).await {
+        Ok(repository) => {
+            let module_count = repository.modules.len();
+            {
+                let storage_guard = state.storage.read().await;
+                if let Some(storage) = storage_guard.as_ref() {
+                    if let Err(e) = storage.save_repository(&repository).await {
+                        warn!(request_id = %request_id, paper_id = %paper_id, error = %e, "Failed to save generated repository");
+                    }
+                }
+            }
+            info!(request_id = %request_id, paper_id = %paper_id, modules = module_count, "Code generation completed");
+            let _ = broadcast::broadcast_paper_processed(
+                state,
+                paper_id,
+                "completed",
+                module_count,
+                Some(format!("Generated {} modules", module_count)),
+            )
+            .await;
+        }
+        Err(e) => {
+            error!(request_id = %request_id, paper_id = %paper_id, error = %e, "Code generation failed");
+            let _ = broadcast::broadcast_paper_processed(
+                state,
+                paper_id,
+                "failed",
+                0,
+                Some(format!("Code generation failed: {}", e)),
+            )
+            .await;
         }
     }
 }

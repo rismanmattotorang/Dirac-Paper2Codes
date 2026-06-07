@@ -86,12 +86,20 @@ export async function uploadPaper(
 }
 
 /**
- * Begin processing a paper (segmentation, extraction, embeddings).
+ * Begin processing a paper (segmentation, extraction, embeddings) and, when a
+ * domain skill is selected and LLM keys are configured, skill-guided code
+ * generation. The selected skill + target language are forwarded to the backend.
  */
 export async function processPaper(
   paperId: string,
+  options?: { skillId?: string; language?: string },
 ): Promise<ApiResponse<ProcessingStatusResponse>> {
-  return apiClient.post<ProcessingStatusResponse>(`/api/papers/${paperId}/process`);
+  const params = new URLSearchParams();
+  if (options?.skillId) params.set('skill_id', options.skillId);
+  if (options?.language) params.set('language', options.language);
+  const query = params.toString();
+  const path = `/api/papers/${paperId}/process${query ? `?${query}` : ''}`;
+  return apiClient.post<ProcessingStatusResponse>(path);
 }
 
 /**

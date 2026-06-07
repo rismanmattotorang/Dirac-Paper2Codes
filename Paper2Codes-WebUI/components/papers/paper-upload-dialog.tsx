@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { IconUpload, IconFile, IconX, IconLoader, IconCheckCircle } from "@/components/ui/icons"
 import { uploadPaper, processPaper } from "@/lib/api/papers"
+import { getSelectedSkill } from "@/lib/skill-selection"
 
 interface PaperUploadDialogProps {
   open: boolean
@@ -94,9 +95,14 @@ export function PaperUploadDialog({ open, onOpenChange, onUploadComplete }: Pape
       setSuccess(true)
       setUploadProgress(100)
 
-      // Start backend processing asynchronously (best effort)
+      // Start backend processing asynchronously (best effort), forwarding the
+      // user's selected domain skill so it drives generation.
       const paperId = response.data.id
-      processPaper(paperId).catch((err) => {
+      const selectedSkill = getSelectedSkill()
+      processPaper(paperId, {
+        skillId: selectedSkill?.skillId,
+        language: selectedSkill?.language,
+      }).catch((err) => {
         console.warn("Failed to start paper processing:", err)
       })
 
