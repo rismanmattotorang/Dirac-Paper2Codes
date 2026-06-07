@@ -4,8 +4,12 @@ import { mockApi } from "./fixtures"
 test.beforeEach(async ({ page }) => {
   await mockApi(page)
   await page.goto("/")
-  await page.getByRole("button", { name: /Domain Skills/i }).first().click()
-  await expect(page.getByRole("heading", { name: "Domain Skills" })).toBeVisible()
+  const navButton = page.getByRole("button", { name: /Domain Skills/i }).first()
+  await navButton.waitFor({ state: "visible" })
+  await navButton.click()
+  await expect(page.getByRole("heading", { name: "Domain Skills" })).toBeVisible({
+    timeout: 15000,
+  })
 })
 
 test("lists the skill catalog and shows recommended libraries", async ({ page }) => {

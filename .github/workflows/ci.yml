@@ -19,6 +19,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint (informational)
+    runs-on: ubuntu-latest
+    # Reports rustfmt/clippy findings without blocking the build (the codebase
+    # predates a clean fmt/clippy pass; tighten to required once it is green).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Paper2Codes-Core
+      - name: rustfmt
+        working-directory: Paper2Codes-Core
+        run: cargo fmt --all -- --check
+      - name: clippy
+        working-directory: Paper2Codes-Core
+        run: cargo clippy --all-targets
+
   core:
     name: Engine (Rust)
     runs-on: ubuntu-latest
