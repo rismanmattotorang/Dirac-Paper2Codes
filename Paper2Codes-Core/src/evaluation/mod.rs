@@ -5,7 +5,9 @@
 pub mod file_ranking;
 pub mod judge;
 pub mod metrics;
+pub mod self_consistency;
 
 pub use file_ranking::rank_files_by_relevance;
 pub use judge::{GradingResult, RequirementType, SimpleJudge};
 pub use metrics::{AgentMetrics, BenchmarkMetrics};
+pub use self_consistency::{best_of_n, select_best, Candidate, CandidateGenerator};

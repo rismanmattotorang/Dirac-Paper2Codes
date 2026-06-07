@@ -723,22 +723,35 @@ impl Coordinator {
     }
 
     async fn handle_verification_feedback(&mut self, feedback: VerificationReport) -> Result<()> {
-        // Create fix tasks for failed verifications
-        for issue in &feedback.issues {
-            if issue.severity == crate::types::IssueSeverity::Critical
-                || issue.severity == crate::types::IssueSeverity::Error
-            {
-                if let Some(module_id) = &issue.location {
-                    let fix_task = Task::new(
-                        TaskType::Fix {
-                            module_id: module_id.file.to_string_lossy().to_string(),
-                            feedback: issue.message.clone(),
-                        },
-                        format!("Fix issue: {}", issue.message),
-                    );
-                    self.state.task_queue.add_task(fix_task);
-                }
-            }
+        // Phase 4 self-debugging: group actionable (critical/error) issues by
+        // module and emit ONE structured, severity-prioritised repair brief per
+        // module rather than a separate fix task per symptom. This gives the
+        // coder the full picture of a module's problems in a single prompt.
+        let actionable: Vec<crate::types::VerificationIssue> = feedback
+            .issues
+            .iter()
+            .filter(|i| {
+                i.severity == crate::types::IssueSeverity::Critical
+                    || i.severity == crate::types::IssueSeverity::Error
+            })
+            .cloned()
+            .collect();
+
+        if actionable.is_empty() {
+            return Ok(());
+        }
+
+        let (groups, _unlocated) = crate::agents::repair::group_by_module(&actionable);
+        for (module, issues) in groups {
+            let brief = crate::agents::repair::format_repair_feedback(&module, &issues);
+            let fix_task = Task::new(
+                TaskType::Fix {
+                    module_id: module,
+                    feedback: brief.clone(),
+                },
+                brief,
+            );
+            self.state.task_queue.add_task(fix_task);
         }
 
         Ok(())
