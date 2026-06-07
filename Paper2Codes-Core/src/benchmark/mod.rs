@@ -14,9 +14,11 @@
 //! the production path wraps the real coordinator + judge in the CLI.
 
 pub mod manifest;
+pub mod offline;
 pub mod scoring;
 
 pub use manifest::{BenchmarkCase, BenchmarkManifest};
+pub use offline::OfflineStubGenerator;
 pub use scoring::{FileSetScore, ReferenceScore};
 
 use std::path::Path;
@@ -318,6 +320,7 @@ mod tests {
             paper_path: "p.txt".into(),
             reference_repo: None,
             rubric_path: None,
+            skill_id: None,
         }
     }
 

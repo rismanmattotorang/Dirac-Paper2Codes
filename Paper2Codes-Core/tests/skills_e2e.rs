@@ -74,6 +74,7 @@ async fn user_selects_domain_uploads_paper_generates_and_evaluates() {
             paper_path: "paper.txt".into(),
             reference_repo: None,
             rubric_path: None,
+            skill_id: None,
         }],
     };
     let generator = SkillGuidedGenerator {
@@ -114,6 +115,7 @@ async fn skill_guided_generation_scores_against_reference() {
             paper_path: "paper.txt".into(),
             reference_repo: Some(dir.clone()),
             rubric_path: None,
+            skill_id: None,
         }],
     };
     let generator = SkillGuidedGenerator {

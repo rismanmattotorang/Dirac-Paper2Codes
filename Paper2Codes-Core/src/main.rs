@@ -67,6 +67,15 @@ enum Commands {
         /// Optional path to write the JSON report
         #[arg(short, long)]
         output: Option<String>,
+
+        /// Run fully offline with a deterministic stub generator (no API keys).
+        /// Validates the harness, dataset, and scoring before keys are configured.
+        #[arg(long)]
+        offline: bool,
+
+        /// Target language for offline generation
+        #[arg(long, default_value = "python")]
+        language: String,
     },
 }
 
@@ -434,23 +443,35 @@ async fn main() -> Result<()> {
                 ))
             }
         }
-        Commands::Bench { manifest, output } => {
+        Commands::Bench {
+            manifest,
+            output,
+            offline,
+            language,
+        } => {
             let manifest_data = paper2codes::benchmark::BenchmarkManifest::load(&manifest)?;
             println!(
-                "Running benchmark{} over {} case(s)...",
+                "Running benchmark{}{} over {} case(s)...",
                 manifest_data
                     .name
                     .as_ref()
                     .map(|n| format!(" '{}'", n))
                     .unwrap_or_default(),
+                if offline { " [offline]" } else { "" },
                 manifest_data.cases.len()
             );
 
-            // Reference-based scoring is fully automated here; reference-free
-            // rubric grading is available via the RubricGrader trait.
-            let generator = CliRepoGenerator;
-            let report =
-                paper2codes::benchmark::run_benchmark(&manifest_data, &generator, None).await;
+            // Offline mode uses a deterministic stub generator so the harness can
+            // be validated without API keys. Otherwise the real coordinator runs.
+            // Reference-based scoring is automatic; reference-free rubric grading
+            // is available via the RubricGrader trait.
+            let report = if offline {
+                let generator = paper2codes::benchmark::OfflineStubGenerator::new(language);
+                paper2codes::benchmark::run_benchmark(&manifest_data, &generator, None).await
+            } else {
+                let generator = CliRepoGenerator;
+                paper2codes::benchmark::run_benchmark(&manifest_data, &generator, None).await
+            };
 
             println!("\n{}", report.to_markdown());
 

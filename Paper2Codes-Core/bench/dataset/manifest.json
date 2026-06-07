@@ -1,0 +1,23 @@
+{
+  "name": "dirac-paper2codes-offline-smoke",
+  "cases": [
+    {
+      "id": "black-scholes",
+      "paper_path": "papers/black-scholes.txt",
+      "reference_repo": "refs/black-scholes",
+      "skill_id": "computational-finance"
+    },
+    {
+      "id": "newton-sqrt",
+      "paper_path": "papers/newton-sqrt.txt",
+      "reference_repo": "refs/newton-sqrt",
+      "skill_id": "computational-physics"
+    },
+    {
+      "id": "bell-state",
+      "paper_path": "papers/bell-state.txt",
+      "reference_repo": "refs/bell-state",
+      "skill_id": "quantum-computation"
+    }
+  ]
+}

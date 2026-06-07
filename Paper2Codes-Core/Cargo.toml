@@ -1,12 +1,12 @@
 [package]
 name = "paper2codes"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["Paper2Codes Contributors"]
+authors = ["Dirac Technologies (https://dirac.id)"]
 description = "A neuro-symbolic RAG framework for automated code generation from scientific literature"
 license = "MIT"
-repository = "https://github.com/yourusername/Paper2Codes"
-homepage = "https://github.com/yourusername/Paper2Codes"
+repository = "https://github.com/rismanmattotorang/Dirac-Paper2Codes"
+homepage = "https://dirac.id"
 documentation = "https://docs.rs/paper2codes"
 keywords = ["rag", "code-generation", "llm", "scientific-papers", "ai"]
 categories = ["science", "development-tools", "artificial-intelligence"]

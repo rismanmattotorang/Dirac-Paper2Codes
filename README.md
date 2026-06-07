@@ -10,6 +10,7 @@ Paper2Codes turns scientific papers into verified, runnable code. Upload a PDF,
 get a working repository — planned, written, and checked by a team of
 specialized AI agents grounded in neuro-symbolic retrieval.
 
+[![Version](https://img.shields.io/badge/version-1.0-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![Frontend](https://img.shields.io/badge/web-Next.js-black.svg)](https://nextjs.org)
@@ -341,9 +342,12 @@ Open an issue to discuss substantial changes before sending a pull request.
 
 ```bibtex
 @software{paper2codes,
-  title  = {Paper2Codes: A Neuro-Symbolic RAG Framework for Automated Code Generation},
-  author = {Dirac Technologies},
-  url    = {https://github.com/rismanmattotorang/Dirac-Paper2Codes}
+  title   = {Paper2Codes: A Neuro-Symbolic RAG Framework for Automated Code Generation},
+  author  = {Dirac Technologies},
+  version = {1.0},
+  year    = {2026},
+  url      = {https://dirac.id},
+  note    = {https://github.com/rismanmattotorang/Dirac-Paper2Codes}
 }
 ```
 
@@ -357,10 +361,11 @@ Released under the MIT License — see [LICENSE](LICENSE).
 
 ## About Dirac Technologies
 
-**Dirac Technologies** builds tools that close the gap between research and
-working software. Paper2Codes is our reproduction layer for science: rigorous,
-verifiable, and fast — engineering the bridge from ideas on paper to code in
-production.
+**Dirac Technologies** ([Dirac.id](https://dirac.id)) is an Indonesian deep-tech
+startup in **quantum computing**, building tools that close the gap between
+research and working software. Paper2Codes is our reproduction layer for
+science: rigorous, verifiable, and fast — engineering the bridge from ideas on
+paper to code in production.
 
 <div align="center">
 
