@@ -1,0 +1,80 @@
+name: Benchmark
+
+# Phase 0 (validation): measure live code-generation quality over the curated
+# dataset and publish a report. Runs the LLM-judge rubric + reference scoring
+# when an API key secret is configured; otherwise falls back to the offline
+# smoke so the job is always green and informative.
+#
+# Configure repo secrets (Settings → Secrets → Actions) to enable live runs:
+#   OPENAI_API_KEY  (and/or ANTHROPIC_API_KEY / OPENROUTER_API_KEY)
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # nightly at 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      min_reference_overall:
+        description: "Optional reference-overall floor to gate on (e.g. 0.3)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Reproducibility benchmark
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Paper2Codes-Core
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Paper2Codes-Core
+
+      - name: Build
+        run: cargo build
+
+      - name: Detect API key
+        id: key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ] || [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$OPENROUTER_API_KEY" ]; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "live=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Live benchmark (LLM-judge rubric + reference scoring)
+        if: steps.key.outputs.live == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          ARGS="bench --manifest bench/dataset/manifest.json --rubric --output report.json"
+          if [ -n "${{ github.event.inputs.min_reference_overall }}" ]; then
+            ARGS="$ARGS --min-reference-overall ${{ github.event.inputs.min_reference_overall }}"
+          fi
+          cargo run -- $ARGS
+
+      - name: Offline smoke (no API key configured)
+        if: steps.key.outputs.live != 'true'
+        run: cargo run -- bench --manifest bench/dataset/manifest.json --offline --output report.json
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: Paper2Codes-Core/report.json
+          if-no-files-found: ignore

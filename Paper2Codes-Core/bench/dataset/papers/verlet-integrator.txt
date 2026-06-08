@@ -1,0 +1,20 @@
+Velocity Verlet Integration of the Harmonic Oscillator
+
+Abstract. We describe the velocity Verlet algorithm, a symplectic integrator
+widely used in molecular dynamics, applied to the one-dimensional harmonic
+oscillator.
+
+1. Model. For a unit mass with acceleration a(x) = -k x (spring constant k),
+the state is position x and velocity v.
+
+2. Method (Algorithm 1). Given time step dt, each step updates
+
+  Equation (1): x_{n+1} = x_n + v_n dt + 0.5 a(x_n) dt^2
+  Equation (2): v_{n+1} = v_n + 0.5 (a(x_n) + a(x_{n+1})) dt
+
+3. Properties. Velocity Verlet is symplectic and conserves the total energy
+E = 0.5 v^2 + 0.5 k x^2 to high accuracy over long runs.
+
+4. Implementation notes. The implementation should advance an initial (x, v)
+for a number of steps and expose the energy. Validate that the total energy is
+conserved within a small tolerance over many steps.

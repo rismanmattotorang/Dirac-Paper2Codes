@@ -1,0 +1,17 @@
+The Global Minimum-Variance Portfolio
+
+Abstract. We derive the closed-form weights of the global minimum-variance
+(GMV) portfolio, the fully-invested portfolio with the smallest possible
+variance given a covariance matrix of asset returns.
+
+1. Problem. Given the covariance matrix Sigma of N assets, choose portfolio
+weights w (summing to one) that minimise the portfolio variance wᵀ Sigma w.
+
+2. Solution (Algorithm 1). With 1 the vector of ones, the GMV weights are
+
+  Equation (1): w = (Sigma^{-1} 1) / (1ᵀ Sigma^{-1} 1)
+
+3. Implementation notes. The implementation should accept a covariance matrix,
+return weights that sum to one, and expose the resulting portfolio variance.
+Validate that the weights sum to 1 and that the variance is no larger than that
+of any equal-weight portfolio on a small example.

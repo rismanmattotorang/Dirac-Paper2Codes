@@ -43,10 +43,18 @@ production** — to a reliable, secure, observable production service.
 
 ### Phase 0 — Validation & correctness (unblocks everything)
 **Goal:** prove the engine actually produces quality code with real keys.
+
+*Tooling shipped (this phase):*
+- ✅ **LLM-judge rubric scoring** (`--rubric`, reference-free 0–1 faithfulness).
+- ✅ **Quality gate** (`--min-reference-overall`, `--min-rubric`, `--baseline`) that exits non-zero on a floor breach or regression — ready to gate releases (§7).
+- ✅ **Nightly benchmark workflow** (`.github/workflows/benchmark.yml`): live when an API-key secret is set, offline smoke otherwise; uploads `report.json`.
+- ✅ Dataset expanded (10 cases, all domains; living artifact).
+
+*Remaining (needs keys / human review):*
 - Provision LLM keys (OpenAI/Anthropic/OpenRouter) in a **secret store**, not config files.
-- Run `paper2codes bench` (live) over the bundled 8-domain dataset; record per-domain file-F1, content similarity, and a rubric (LLM-judge) score.
-- Expand the dataset (≥25 cases across domains; add harder multi-file references); consider wiring **PaperBench** for scale.
-- Establish a **score floor** and add a nightly (keyed, manual-dispatch) benchmark workflow that publishes a report artifact.
+- Run `paper2codes bench --rubric` (live); record per-domain file-F1, content similarity, and rubric score.
+- Grow the dataset toward ≥25 cases (harder multi-file references); consider wiring **PaperBench** for scale.
+- Establish the **score floor** from the first live runs and turn the gate on in CI.
 - **Exit criteria:** reproducible benchmark report; agreed score floor; ≥1 end-to-end paper→repo run reviewed by a domain expert.
 
 ### Phase 1 — Security & secrets hardening
