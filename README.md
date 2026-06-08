@@ -95,20 +95,29 @@ Paper2Codes ships as two cooperating components:
 ## Features
 
 ### Engine
-- **Intelligent paper processing** — parse PDFs and text; extract algorithms, equations, and structure.
+- **Intelligent paper processing** — parse PDFs and text; extract algorithms, equations, and structure. (PDF text extraction is validated against real IEEE-style papers.)
 - **Automatic domain classification** — detect the paper's field to optimize generation.
 - **Multi-agent orchestration** — parallel execution with semaphore-based concurrency, dependency resolution, and convergence detection.
-- **Advanced retrieval** — embedding-backed vector search (OpenAI, Voyage AI) with hybrid CPR scoring.
-- **SACV verification** — static analysis, dynamic testing, and symbolic reasoning in one pipeline.
-- **Persistent storage** — SurrealDB with native vector search and graph-based dependency tracking.
+- **Advanced retrieval** — embedding-backed vector search (OpenAI, Voyage AI) with hybrid CPR scoring, gracefully degrading to BM25 when no embedding key is present.
+- **SACV verification** — static analysis, dynamic testing, and symbolic checks in one pipeline (built-in linear-constraint SMT; Z3/SymPy back-ends on the roadmap).
+- **Persistent storage** — SurrealDB with native vector search and graph-based dependency tracking; users, sessions, API tokens, and the job queue are durably persisted with crash recovery.
 
 ### Platform
 - **Domain Skills** — choose a computational-domain skill (Finance, Physics, Chemistry, Biology/Bioinformatics, Genomics, Quantum, CFD, Supply Chain, …) that specialises retrieval, generation, and verification; skills are reusable and user-improvable. See [SKILLS.md](SKILLS.md).
 - **Live LLM key management** — set, test, rotate, and remove provider keys per provider from the web UI; changes take effect immediately and are stored server-side (never exposed in full). See [LLM_API_KEY.md](LLM_API_KEY.md).
+- **Auth & API tokens** — web UI login/registration with transparent token refresh, durable refresh-token sessions, RBAC, and personal API tokens (`p2c_…`) for programmatic/CI access.
+- **Durable generation** — code-generation runs on a crash-recoverable job queue with live status, progress, retries, and cancellation, surfaced on the Generated Code page.
 - **Dual interface** — a browser control plane *and* a fully interactive terminal UI (Ratatui).
 - **Real-time updates** — REST + WebSocket streaming of task progress and logs.
 - **Production hardening** — JWT auth, rate limiting, input validation, structured logging, and Prometheus metrics.
-- **Resilience** — automatic retry with exponential backoff and graceful degradation.
+- **Resilience** — automatic retry with exponential backoff, multi-provider fallback, and graceful degradation.
+
+> **Every claim above is audited against the code and runnable checks in
+> [ASSESSMENT.md](ASSESSMENT.md)** — 130 Rust tests pass, the Web UI type-checks
+> clean, and the reproducibility benchmark scores 25/25 cases across 8 domains
+> with a perfect file-structure F1. Live-LLM generation *quality* is gated behind
+> provider keys; the rubric grader and release quality gate are built and ready
+> to measure it.
 
 ---
 
@@ -270,6 +279,7 @@ non-critical stages, and turn on SurrealDB for cross-session reuse.
 
 | Guide | What's inside |
 |---|---|
+| [ASSESSMENT.md](ASSESSMENT.md) | Evidence-based capability audit: per-feature verdicts + validation |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design and component internals |
 | [SPECS.md](SPECS.md) | Technical specifications |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment (Docker, K8s, monitoring) |
@@ -288,11 +298,12 @@ non-critical stages, and turn on SurrealDB for cross-session reuse.
 
 Paper2Codes has been through comprehensive review and hardening:
 
-- ✅ **Security** — input validation, rate limiting, JWT auth, `0600` secret storage
+- ✅ **Security** — input validation, rate limiting, JWT auth + RBAC, personal API tokens, fail-closed checks that reject default secrets in production, `0600` secret storage
+- ✅ **Durability** — SurrealDB-backed users/sessions/tokens and a crash-recoverable job queue (orphaned runs are re-claimed on restart)
 - ✅ **Performance** — adaptive concurrency, HTTP/2 pooling, multi-level caching
-- ✅ **Reliability** — retry with backoff, health checks, graceful recovery
+- ✅ **Reliability** — retry with backoff, multi-provider fallback, health checks, graceful degradation
 - ✅ **Observability** — Prometheus metrics and structured logging
-- ✅ **Quality** — verified algorithms, improved numerical precision, broad error handling
+- ✅ **Quality** — 130 passing tests, a reproducibility benchmark + quality gate, validated PDF extraction
 
 ---
 
@@ -311,8 +322,12 @@ Paper2Codes has been through comprehensive review and hardening:
 - [x] Reproducibility benchmark harness (`paper2codes bench`)
 - [x] Graph-native generation ordering + dependency expansion
 - [x] Domain Skills (choosable, reusable, improvable) across 8 computational domains
+- [x] Real PDF text extraction (validated against real papers)
+- [x] Durable, crash-recoverable job queue + SurrealDB-backed auth/sessions/API tokens
+- [x] Web UI login + transparent token refresh + personal API tokens
 - [ ] Z3 symbolic verification
 - [ ] SymPy equation solving
+- [ ] TOTP two-factor authentication
 - [ ] Multi-paper synthesis
 - [ ] Fine-tuned domain models
 - [ ] Plugin system

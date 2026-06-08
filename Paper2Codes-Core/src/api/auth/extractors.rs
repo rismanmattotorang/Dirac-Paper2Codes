@@ -80,14 +80,27 @@ where
             )
         })?;
 
-        let claims = jwt_service.validate_access_token(token).map_err(|_| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "Invalid or expired token".to_string(),
-            )
-        })?;
+        // Prefer a JWT access token; fall back to a personal API token
+        // (`p2c_…`) resolved against the token store + user store.
+        if let Ok(claims) = jwt_service.validate_access_token(token) {
+            return Ok(CurrentUser::from(claims));
+        }
 
-        Ok(CurrentUser::from(claims))
+        if let Some(api_token) = app_state.api_token_store.verify(token).await {
+            if let Some(user) = app_state.user_store.find_by_id(&api_token.user_id).await {
+                let roles = user.roles_as_strings();
+                return Ok(CurrentUser {
+                    user_id: user.id,
+                    email: user.email,
+                    roles,
+                });
+            }
+        }
+
+        Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid or expired token".to_string(),
+        ))
     }
 }
 

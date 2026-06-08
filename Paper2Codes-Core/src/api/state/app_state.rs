@@ -60,6 +60,9 @@ pub struct AppState {
     /// Stateful refresh-token session store (auth)
     #[cfg(feature = "api")]
     pub session_store: Arc<crate::api::auth::SessionStore>,
+    /// Personal API token store (programmatic auth)
+    #[cfg(feature = "api")]
+    pub api_token_store: Arc<crate::api::auth::ApiTokenStore>,
     /// Durable job queue for long-running work (e.g. paper generation)
     pub job_queue: Arc<crate::jobs::JobQueue>,
     /// WebSocket connection manager
@@ -125,36 +128,110 @@ impl AppState {
         #[cfg(feature = "api")]
         let jwt_service = Arc::new(JwtService::new(&config.api.auth)?);
 
+        // A connected storage manager (clone shares the same connection) used to
+        // back the auth stores and job queue with SurrealDB for cross-restart
+        // durability. `None` keeps everything in-memory (tests / no DB).
         #[cfg(feature = "api")]
-        let user_store = Arc::new(crate::api::auth::UserStore::new());
+        let auth_persistence: Option<Arc<dyn crate::api::auth::AuthPersistence>> = storage
+            .as_ref()
+            .map(|m| Arc::new(m.clone()) as Arc<dyn crate::api::auth::AuthPersistence>);
+        #[cfg(feature = "api")]
+        let token_persistence: Option<Arc<dyn crate::api::auth::ApiTokenPersistence>> = storage
+            .as_ref()
+            .map(|m| Arc::new(m.clone()) as Arc<dyn crate::api::auth::ApiTokenPersistence>);
+        let job_persistence: Option<Arc<dyn crate::jobs::JobStore>> = storage
+            .as_ref()
+            .map(|m| Arc::new(m.clone()) as Arc<dyn crate::jobs::JobStore>);
+
+        #[cfg(feature = "api")]
+        let user_store = {
+            let mut store = crate::api::auth::UserStore::new();
+            if let Some(p) = auth_persistence.clone() {
+                store = store.with_persistence(p);
+            }
+            let store = Arc::new(store);
+            // Rehydrate existing accounts from the durable store.
+            match store.restore().await {
+                Ok(n) if n > 0 => tracing::info!("Restored {} user(s) from storage", n),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("Failed to restore users from storage: {}", e),
+            }
+            store
+        };
         #[cfg(feature = "api")]
         {
             // Seed an initial admin from env (ADMIN_USERNAME / ADMIN_PASSWORD,
             // optional ADMIN_EMAIL) so a fresh deployment has a privileged account
-            // without baking credentials into the image.
+            // without baking credentials into the image. Skipped if an account
+            // with that username already exists (e.g. restored from storage), so
+            // restarts don't create duplicates.
             if let (Ok(username), Ok(password)) =
                 (std::env::var("ADMIN_USERNAME"), std::env::var("ADMIN_PASSWORD"))
             {
-                let email = std::env::var("ADMIN_EMAIL")
-                    .unwrap_or_else(|_| format!("{}@local", username));
-                match crate::api::auth::User::new(
-                    email,
-                    username.clone(),
-                    &password,
-                    vec![crate::api::auth::UserRole::Admin],
-                ) {
-                    Ok(user) => {
-                        user_store.upsert(user).await;
-                        tracing::info!("Seeded admin user '{}'", username);
+                if user_store.find_by_username(&username).await.is_some() {
+                    tracing::info!("Admin user '{}' already exists; skipping seed", username);
+                } else {
+                    let email = std::env::var("ADMIN_EMAIL")
+                        .unwrap_or_else(|_| format!("{}@local", username));
+                    match crate::api::auth::User::new(
+                        email,
+                        username.clone(),
+                        &password,
+                        vec![crate::api::auth::UserRole::Admin],
+                    ) {
+                        Ok(user) => {
+                            user_store.upsert(user).await;
+                            tracing::info!("Seeded admin user '{}'", username);
+                        }
+                        Err(e) => tracing::warn!("Failed to seed admin user: {}", e),
                     }
-                    Err(e) => tracing::warn!("Failed to seed admin user: {}", e),
                 }
             }
         }
         #[cfg(feature = "api")]
-        let session_store = Arc::new(crate::api::auth::SessionStore::new());
+        let session_store = {
+            let mut store = crate::api::auth::SessionStore::new();
+            if let Some(p) = auth_persistence.clone() {
+                store = store.with_persistence(p);
+            }
+            let store = Arc::new(store);
+            match store.restore().await {
+                Ok(n) if n > 0 => tracing::info!("Restored {} active session(s) from storage", n),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("Failed to restore sessions from storage: {}", e),
+            }
+            store
+        };
+        #[cfg(feature = "api")]
+        let api_token_store = {
+            let mut store = crate::api::auth::ApiTokenStore::new();
+            if let Some(p) = token_persistence {
+                store = store.with_persistence(p);
+            }
+            let store = Arc::new(store);
+            match store.restore().await {
+                Ok(n) if n > 0 => tracing::info!("Restored {} API token(s) from storage", n),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("Failed to restore API tokens from storage: {}", e),
+            }
+            store
+        };
 
-        let job_queue = Arc::new(crate::jobs::JobQueue::new());
+        let job_queue = {
+            let mut queue = crate::jobs::JobQueue::new();
+            if let Some(p) = job_persistence {
+                queue = queue.with_persistence(p);
+            }
+            let queue = Arc::new(queue);
+            // Rehydrate outstanding jobs; Running jobs orphaned by a crash are
+            // reset to Pending so the worker re-claims them.
+            match queue.restore().await {
+                Ok(n) if n > 0 => tracing::info!("Recovered {} outstanding job(s) from storage", n),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("Failed to recover jobs from storage: {}", e),
+            }
+            queue
+        };
 
         #[cfg(feature = "api")]
         let websocket_manager = Arc::new(ConnectionManager::new());
@@ -175,6 +252,8 @@ impl AppState {
             user_store,
             #[cfg(feature = "api")]
             session_store,
+            #[cfg(feature = "api")]
+            api_token_store,
             job_queue,
             #[cfg(feature = "api")]
             websocket_manager,

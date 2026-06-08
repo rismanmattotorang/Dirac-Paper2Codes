@@ -353,6 +353,115 @@ impl StorageManager {
         storage.get_segments_by_paper(paper_id).await
     }
 
+    // ---- Auth persistence (users / sessions) ----
+
+    pub async fn save_user(&self, user: &crate::api::auth::user::User) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.save_user(user).await
+    }
+
+    pub async fn update_user(&self, user: &crate::api::auth::user::User) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.update_user(user).await
+    }
+
+    pub async fn list_users(&self) -> Result<Vec<crate::api::auth::user::User>> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.list_users().await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn save_session(&self, session: &crate::api::auth::user::Session) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.save_session(session).await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn list_sessions(&self) -> Result<Vec<crate::api::auth::user::Session>> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.list_sessions().await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn delete_session(&self, refresh_token: &str) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.delete_session(refresh_token).await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn delete_user_sessions(&self, user_id: &str) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.delete_user_sessions(user_id).await
+    }
+
+    // ---- Durable job queue persistence ----
+
+    pub async fn save_job(&self, job: &crate::jobs::Job) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.save_job(job).await
+    }
+
+    pub async fn list_jobs(&self) -> Result<Vec<crate::jobs::Job>> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.list_jobs().await
+    }
+
+    // ---- Personal API token persistence ----
+
+    #[cfg(feature = "api")]
+    pub async fn save_api_token(&self, token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.save_api_token(token).await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn list_api_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.list_api_tokens().await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn delete_api_token(&self, id: &str) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.delete_api_token(id).await
+    }
+
     /// Perform vector search
     pub async fn vector_search(
         &self,
@@ -371,5 +480,61 @@ impl StorageManager {
 impl Default for StorageManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Durable backing for the job queue: write-through goes to SurrealDB, and the
+/// queue rehydrates from `list_jobs` on startup.
+#[async_trait::async_trait]
+impl crate::jobs::JobStore for StorageManager {
+    async fn persist_job(&self, job: &crate::jobs::Job) -> Result<()> {
+        self.save_job(job).await
+    }
+
+    async fn load_jobs(&self) -> Result<Vec<crate::jobs::Job>> {
+        self.list_jobs().await
+    }
+}
+
+/// Durable backing for the auth stores: users/sessions persist to SurrealDB and
+/// rehydrate on startup.
+#[cfg(feature = "api")]
+#[async_trait::async_trait]
+impl crate::api::auth::store::AuthPersistence for StorageManager {
+    async fn load_users(&self) -> Result<Vec<crate::api::auth::user::User>> {
+        self.list_users().await
+    }
+
+    async fn save_user(&self, user: &crate::api::auth::user::User) -> Result<()> {
+        StorageManager::save_user(self, user).await
+    }
+
+    async fn load_sessions(&self) -> Result<Vec<crate::api::auth::user::Session>> {
+        self.list_sessions().await
+    }
+
+    async fn save_session(&self, session: &crate::api::auth::user::Session) -> Result<()> {
+        StorageManager::save_session(self, session).await
+    }
+
+    async fn delete_session(&self, refresh_token: &str) -> Result<()> {
+        StorageManager::delete_session(self, refresh_token).await
+    }
+}
+
+/// Durable backing for personal API tokens.
+#[cfg(feature = "api")]
+#[async_trait::async_trait]
+impl crate::api::auth::tokens::ApiTokenPersistence for StorageManager {
+    async fn load_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        self.list_api_tokens().await
+    }
+
+    async fn save_token(&self, token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        StorageManager::save_api_token(self, token).await
+    }
+
+    async fn delete_token(&self, id: &str) -> Result<()> {
+        StorageManager::delete_api_token(self, id).await
     }
 }

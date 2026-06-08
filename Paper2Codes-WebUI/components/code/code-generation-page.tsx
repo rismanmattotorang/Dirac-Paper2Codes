@@ -1,6 +1,7 @@
 "use client"
 
 import { CodeBrowser } from "./CodeBrowser"
+import { GenerationJobsPanel } from "./generation-jobs-panel"
 import { Button } from "@/components/ui/button"
 import { IconDownload, IconRefresh } from "@/components/ui/icons"
 import { toast } from "sonner"
@@ -69,6 +70,8 @@ export function CodeGenerationPage() {
           )}
         </div>
       </div>
+
+      <GenerationJobsPanel />
 
       <div className="flex-1">
         <CodeBrowser />

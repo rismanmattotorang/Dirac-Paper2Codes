@@ -109,6 +109,41 @@ pub trait Storage: Send + Sync {
     #[cfg(feature = "api")]
     async fn cleanup_expired_sessions(&self) -> Result<usize>;
 
+    /// List all users (used to rehydrate the in-memory auth cache on startup).
+    /// Defaults to empty so backends without user persistence are unaffected.
+    async fn list_users(&self) -> Result<Vec<crate::api::auth::user::User>> {
+        Ok(Vec::new())
+    }
+
+    /// List all sessions (used to rehydrate the in-memory session cache).
+    #[cfg(feature = "api")]
+    async fn list_sessions(&self) -> Result<Vec<crate::api::auth::user::Session>> {
+        Ok(Vec::new())
+    }
+
+    // Durable job queue (Phase 2). Defaults make these no-ops for backends that
+    // don't persist jobs, keeping the queue in-memory only.
+    /// Upsert a job's current state.
+    async fn save_job(&self, _job: &crate::jobs::Job) -> Result<()> {
+        Ok(())
+    }
+    /// Load all persisted jobs (used once on startup).
+    async fn list_jobs(&self) -> Result<Vec<crate::jobs::Job>> {
+        Ok(Vec::new())
+    }
+
+    // Personal API tokens. Defaulted so backends without token persistence are
+    // unaffected (the store then operates in-memory only).
+    async fn save_api_token(&self, _token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        Ok(())
+    }
+    async fn list_api_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        Ok(Vec::new())
+    }
+    async fn delete_api_token(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+
     // Admin operations (optional - may not be supported by all backends)
     async fn execute_raw_query(&self, _query: &str) -> Result<serde_json::Value> {
         Err(crate::storage::errors::StorageError::NotSupported(

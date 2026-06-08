@@ -9,11 +9,15 @@
 //!   backoff) / cancel / progress operations,
 //! * a [`JobHandler`] trait and a worker loop ([`JobQueue::run_worker`]).
 //!
-//! The default [`JobQueue`] keeps state in memory (durable for the life of the
-//! process and safe across concurrent workers). The [`Job`] record is
-//! `Serialize`/`Deserialize` so the same model maps directly onto a SurrealDB
-//! table for cross-restart durability — the production step is to back the
-//! queue with that store.
+//! The [`JobQueue`] keeps an in-memory index for fast claiming and concurrency
+//! safety, but can be backed by a [`JobStore`] for cross-restart durability.
+//! When a store is attached, every state transition is written through to it,
+//! [`JobQueue::restore`] reloads outstanding work on boot (resetting jobs that
+//! were `Running` when the process died back to `Pending` so no work is lost),
+//! and the [`Job`] record's `Serialize`/`Deserialize` maps directly onto a
+//! SurrealDB table. With no store attached the queue is in-memory only
+//! (durable for the life of the process), which keeps tests and the default
+//! path unchanged.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,17 +85,30 @@ impl Job {
     }
 }
 
+/// Durable backing store for the job queue. Implemented by the storage layer
+/// (SurrealDB) so jobs survive a process restart; left unset for the in-memory
+/// default used by tests and single-process runs.
+#[async_trait]
+pub trait JobStore: Send + Sync {
+    /// Upsert the job's current state.
+    async fn persist_job(&self, job: &Job) -> Result<()>;
+    /// Load all jobs (used once on startup to rebuild the in-memory index).
+    async fn load_jobs(&self) -> Result<Vec<Job>>;
+}
+
 #[derive(Default)]
 struct QueueState {
     jobs: HashMap<Uuid, Job>,
     order: Vec<Uuid>,
 }
 
-/// An in-memory, concurrency-safe durable job queue.
+/// A concurrency-safe job queue with an in-memory index and an optional durable
+/// backing [`JobStore`].
 pub struct JobQueue {
     state: RwLock<QueueState>,
     base_backoff_ms: u64,
     max_backoff_ms: u64,
+    persistence: Option<Arc<dyn JobStore>>,
 }
 
 impl Default for JobQueue {
@@ -110,88 +127,186 @@ impl JobQueue {
             state: RwLock::new(QueueState::default()),
             base_backoff_ms,
             max_backoff_ms,
+            persistence: None,
         }
+    }
+
+    /// Attach a durable backing store. Call [`JobQueue::restore`] afterwards to
+    /// rehydrate outstanding work.
+    pub fn with_persistence(mut self, store: Arc<dyn JobStore>) -> Self {
+        self.persistence = Some(store);
+        self
+    }
+
+    /// Best-effort write-through to the backing store. A persistence failure is
+    /// logged but never breaks the in-memory queue (availability over a single
+    /// lost durability write); the next transition re-persists the latest state.
+    async fn persist(&self, job: &Job) {
+        if let Some(store) = &self.persistence {
+            if let Err(e) = store.persist_job(job).await {
+                tracing::warn!(job = %job.id, error = %e, "failed to persist job state");
+            }
+        }
+    }
+
+    /// Rebuild the in-memory index from the backing store. Jobs left `Running`
+    /// by a crashed worker are reset to `Pending` so they are re-claimed —
+    /// guaranteeing no outstanding work is lost across a restart. Returns the
+    /// number of outstanding (pending/running) jobs recovered.
+    pub async fn restore(&self) -> Result<usize> {
+        let Some(store) = &self.persistence else {
+            return Ok(0);
+        };
+        let jobs = store.load_jobs().await?;
+        let mut recovered = 0usize;
+        let mut requeued: Vec<Job> = Vec::new();
+        {
+            let mut state = self.state.write().await;
+            state.jobs.clear();
+            state.order.clear();
+            for mut job in jobs {
+                if job.status == JobStatus::Running {
+                    // The worker that owned this job died; make it claimable again.
+                    job.status = JobStatus::Pending;
+                    job.ready_at = None;
+                    job.updated_at = Utc::now();
+                    requeued.push(job.clone());
+                }
+                if matches!(job.status, JobStatus::Pending | JobStatus::Running) {
+                    recovered += 1;
+                }
+                state.order.push(job.id);
+                state.jobs.insert(job.id, job);
+            }
+        }
+        // Persist the Running -> Pending reset outside the lock.
+        for job in &requeued {
+            self.persist(job).await;
+        }
+        Ok(recovered)
     }
 
     /// Enqueue a new job, returning its id.
     pub async fn enqueue(&self, kind: impl Into<String>, payload: impl Into<String>, max_attempts: u32) -> Uuid {
         let job = Job::new(kind.into(), payload.into(), max_attempts);
         let id = job.id;
-        let mut state = self.state.write().await;
-        state.order.push(id);
-        state.jobs.insert(id, job);
+        {
+            let mut state = self.state.write().await;
+            state.order.push(id);
+            state.jobs.insert(id, job.clone());
+        }
+        self.persist(&job).await;
         id
     }
 
     /// Claim the next ready pending job (FIFO), marking it `Running`.
     pub async fn claim_next(&self) -> Option<Job> {
         let now = Utc::now();
-        let mut state = self.state.write().await;
-        let ids: Vec<Uuid> = state.order.clone();
-        for id in ids {
-            if let Some(job) = state.jobs.get(&id) {
-                if job.is_claimable(now) {
-                    let job = state.jobs.get_mut(&id).unwrap();
-                    job.status = JobStatus::Running;
-                    job.attempts += 1;
-                    job.ready_at = None;
-                    job.updated_at = now;
-                    return Some(job.clone());
+        let claimed = {
+            let mut state = self.state.write().await;
+            let ids: Vec<Uuid> = state.order.clone();
+            let mut found = None;
+            for id in ids {
+                if let Some(job) = state.jobs.get(&id) {
+                    if job.is_claimable(now) {
+                        let job = state.jobs.get_mut(&id).unwrap();
+                        job.status = JobStatus::Running;
+                        job.attempts += 1;
+                        job.ready_at = None;
+                        job.updated_at = now;
+                        found = Some(job.clone());
+                        break;
+                    }
                 }
             }
+            found
+        };
+        if let Some(ref job) = claimed {
+            self.persist(job).await;
         }
-        None
+        claimed
     }
 
     /// Mark a running job complete.
     pub async fn complete(&self, id: Uuid) {
-        let mut state = self.state.write().await;
-        if let Some(job) = state.jobs.get_mut(&id) {
-            job.status = JobStatus::Completed;
-            job.progress = 1.0;
-            job.updated_at = Utc::now();
+        let updated = {
+            let mut state = self.state.write().await;
+            state.jobs.get_mut(&id).map(|job| {
+                job.status = JobStatus::Completed;
+                job.progress = 1.0;
+                job.updated_at = Utc::now();
+                job.clone()
+            })
+        };
+        if let Some(ref job) = updated {
+            self.persist(job).await;
         }
     }
 
     /// Record a failure. Re-queues with exponential backoff while attempts
     /// remain; otherwise marks the job `Failed`. Returns `true` if it will retry.
     pub async fn fail(&self, id: Uuid, error: impl Into<String>) -> bool {
-        let mut state = self.state.write().await;
         let (base, max) = (self.base_backoff_ms, self.max_backoff_ms);
-        if let Some(job) = state.jobs.get_mut(&id) {
-            job.last_error = Some(error.into());
-            job.updated_at = Utc::now();
-            if job.attempts < job.max_attempts {
-                let shift = job.attempts.saturating_sub(1).min(20);
-                let backoff = base.saturating_mul(1u64 << shift).min(max);
-                job.ready_at = Some(Utc::now() + chrono::Duration::milliseconds(backoff as i64));
-                job.status = JobStatus::Pending;
-                return true;
+        let (will_retry, updated) = {
+            let mut state = self.state.write().await;
+            if let Some(job) = state.jobs.get_mut(&id) {
+                job.last_error = Some(error.into());
+                job.updated_at = Utc::now();
+                if job.attempts < job.max_attempts {
+                    let shift = job.attempts.saturating_sub(1).min(20);
+                    let backoff = base.saturating_mul(1u64 << shift).min(max);
+                    job.ready_at =
+                        Some(Utc::now() + chrono::Duration::milliseconds(backoff as i64));
+                    job.status = JobStatus::Pending;
+                    (true, Some(job.clone()))
+                } else {
+                    job.status = JobStatus::Failed;
+                    (false, Some(job.clone()))
+                }
+            } else {
+                (false, None)
             }
-            job.status = JobStatus::Failed;
+        };
+        if let Some(ref job) = updated {
+            self.persist(job).await;
         }
-        false
+        will_retry
     }
 
     /// Cancel a pending or running job.
     pub async fn cancel(&self, id: Uuid) -> bool {
-        let mut state = self.state.write().await;
-        if let Some(job) = state.jobs.get_mut(&id) {
-            if matches!(job.status, JobStatus::Pending | JobStatus::Running) {
-                job.status = JobStatus::Cancelled;
-                job.updated_at = Utc::now();
-                return true;
+        let updated = {
+            let mut state = self.state.write().await;
+            match state.jobs.get_mut(&id) {
+                Some(job) if matches!(job.status, JobStatus::Pending | JobStatus::Running) => {
+                    job.status = JobStatus::Cancelled;
+                    job.updated_at = Utc::now();
+                    Some(job.clone())
+                }
+                _ => None,
             }
+        };
+        match updated {
+            Some(ref job) => {
+                self.persist(job).await;
+                true
+            }
+            None => false,
         }
-        false
     }
 
     /// Update a running job's progress (clamped to `[0, 1]`).
     pub async fn set_progress(&self, id: Uuid, progress: f32) {
-        let mut state = self.state.write().await;
-        if let Some(job) = state.jobs.get_mut(&id) {
-            job.progress = progress.clamp(0.0, 1.0);
-            job.updated_at = Utc::now();
+        let updated = {
+            let mut state = self.state.write().await;
+            state.jobs.get_mut(&id).map(|job| {
+                job.progress = progress.clamp(0.0, 1.0);
+                job.updated_at = Utc::now();
+                job.clone()
+            })
+        };
+        if let Some(ref job) = updated {
+            self.persist(job).await;
         }
     }
 
@@ -322,6 +437,58 @@ mod tests {
                 Ok(())
             }
         }
+    }
+
+    /// In-memory mock of a durable store to exercise write-through + restore
+    /// without a real database.
+    #[derive(Default)]
+    struct MockJobStore {
+        jobs: RwLock<HashMap<Uuid, Job>>,
+    }
+    #[async_trait]
+    impl JobStore for MockJobStore {
+        async fn persist_job(&self, job: &Job) -> Result<()> {
+            self.jobs.write().await.insert(job.id, job.clone());
+            Ok(())
+        }
+        async fn load_jobs(&self) -> Result<Vec<Job>> {
+            Ok(self.jobs.read().await.values().cloned().collect())
+        }
+    }
+
+    #[tokio::test]
+    async fn write_through_persists_every_transition() {
+        let store = Arc::new(MockJobStore::default());
+        let q = JobQueue::with_backoff(0, 0).with_persistence(store.clone());
+        let id = q.enqueue("test", "{}", 3).await;
+        assert_eq!(store.jobs.read().await[&id].status, JobStatus::Pending);
+        q.claim_next().await.unwrap();
+        assert_eq!(store.jobs.read().await[&id].status, JobStatus::Running);
+        q.complete(id).await;
+        assert_eq!(store.jobs.read().await[&id].status, JobStatus::Completed);
+    }
+
+    #[tokio::test]
+    async fn restore_recovers_running_jobs_after_crash() {
+        let store = Arc::new(MockJobStore::default());
+        // Simulate a process that enqueued + claimed a job, then died mid-run.
+        let id = {
+            let q = JobQueue::with_backoff(0, 0).with_persistence(store.clone());
+            let id = q.enqueue("paper_generation", "{}", 3).await;
+            q.claim_next().await.unwrap(); // now Running, persisted as Running
+            id
+        };
+        assert_eq!(store.jobs.read().await[&id].status, JobStatus::Running);
+
+        // New process restores from the store: the orphaned Running job must
+        // become claimable again so no work is lost.
+        let q2 = JobQueue::with_backoff(0, 0).with_persistence(store.clone());
+        let recovered = q2.restore().await.unwrap();
+        assert_eq!(recovered, 1);
+        assert_eq!(q2.get(id).await.unwrap().status, JobStatus::Pending);
+        let reclaimed = q2.claim_next().await.unwrap();
+        assert_eq!(reclaimed.id, id);
+        assert_eq!(reclaimed.attempts, 2); // first attempt + this one
     }
 
     #[tokio::test]

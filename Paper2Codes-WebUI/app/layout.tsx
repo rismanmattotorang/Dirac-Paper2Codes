@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { ThemeProvider } from "@/components/theme-provider"
 import { QueryProvider } from "@/lib/providers/query-provider"
+import { AuthProvider } from "@/lib/auth/auth-context"
 import { WebSocketProvider } from "@/lib/providers/WebSocketProvider"
 import { RealtimeNotifications } from "@/components/notifications/realtime-notifications"
 import { Toaster } from "@/components/ui/sonner"
@@ -51,11 +52,13 @@ export default function RootLayout({
         <ErrorBoundary>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             <QueryProvider>
-              <WebSocketProvider>
-                <RealtimeNotifications />
-                {children}
-                <Toaster />
-              </WebSocketProvider>
+              <AuthProvider>
+                <WebSocketProvider>
+                  <RealtimeNotifications />
+                  {children}
+                  <Toaster />
+                </WebSocketProvider>
+              </AuthProvider>
             </QueryProvider>
           </ThemeProvider>
         </ErrorBoundary>

@@ -5,10 +5,10 @@ use crate::api::state::AppState;
 use crate::api::types::errors::ApiError as ApiErrorResponse;
 use crate::api::types::responses::ApiResponse;
 use axum::{
-    extract::Extension,
+    extract::{Extension, Path},
     http::StatusCode,
     response::Json,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -333,6 +333,112 @@ pub async fn logout(
     Json(ApiResponse::success(()))
 }
 
+// ---- Personal API tokens ----
+
+/// Request to mint a new personal API token.
+#[derive(Debug, Deserialize)]
+pub struct CreateTokenRequest {
+    pub name: String,
+    /// Optional lifetime in days; omit for a non-expiring token.
+    pub expires_in_days: Option<u32>,
+}
+
+/// Public view of a token (never includes the secret).
+#[derive(Debug, Serialize)]
+pub struct ApiTokenInfo {
+    pub id: String,
+    pub name: String,
+    pub prefix: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<crate::api::auth::ApiToken> for ApiTokenInfo {
+    fn from(t: crate::api::auth::ApiToken) -> Self {
+        Self {
+            id: t.id,
+            name: t.name,
+            prefix: t.prefix,
+            created_at: t.created_at,
+            last_used_at: t.last_used_at,
+            expires_at: t.expires_at,
+        }
+    }
+}
+
+/// Response returned exactly once on creation — includes the plaintext token.
+#[derive(Debug, Serialize)]
+pub struct CreateTokenResponse {
+    /// The plaintext token. Shown only here; it cannot be retrieved again.
+    pub token: String,
+    #[serde(flatten)]
+    pub info: ApiTokenInfo,
+}
+
+/// Create a personal API token for the authenticated user.
+pub async fn create_api_token(
+    Extension(app_state): Extension<Arc<AppState>>,
+    user: CurrentUser,
+    Json(request): Json<CreateTokenRequest>,
+) -> std::result::Result<Json<ApiResponse<CreateTokenResponse>>, (StatusCode, Json<ApiErrorResponse>)>
+{
+    let name = request.name.trim();
+    if name.is_empty() || name.len() > 100 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorResponse::validation_error_simple(
+                "Token name must be between 1 and 100 characters",
+            )),
+        ));
+    }
+    let expires_at = request
+        .expires_in_days
+        .map(|d| chrono::Utc::now() + chrono::Duration::days(d as i64));
+
+    let (token, plaintext) = app_state
+        .api_token_store
+        .create(user.user_id, name.to_string(), expires_at)
+        .await;
+
+    Ok(Json(ApiResponse::success(CreateTokenResponse {
+        token: plaintext,
+        info: ApiTokenInfo::from(token),
+    })))
+}
+
+/// List the authenticated user's API tokens (without secrets).
+pub async fn list_api_tokens(
+    Extension(app_state): Extension<Arc<AppState>>,
+    user: CurrentUser,
+) -> Json<ApiResponse<Vec<ApiTokenInfo>>> {
+    let mut tokens: Vec<ApiTokenInfo> = app_state
+        .api_token_store
+        .list_for_user(&user.user_id)
+        .await
+        .into_iter()
+        .map(ApiTokenInfo::from)
+        .collect();
+    tokens.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Json(ApiResponse::success(tokens))
+}
+
+/// Revoke one of the authenticated user's API tokens.
+pub async fn revoke_api_token(
+    Extension(app_state): Extension<Arc<AppState>>,
+    user: CurrentUser,
+    Path(id): Path<String>,
+) -> std::result::Result<Json<ApiResponse<()>>, (StatusCode, Json<ApiErrorResponse>)> {
+    if app_state.api_token_store.revoke(&id, &user.user_id).await {
+        Ok(Json(ApiResponse::success(())))
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiErrorResponse::new("NOT_FOUND", "Token not found")),
+        ))
+    }
+}
+
 /// Create auth router
 pub fn auth_router() -> Router {
     Router::new()
@@ -341,4 +447,9 @@ pub fn auth_router() -> Router {
         .route("/api/auth/refresh", post(refresh_token))
         .route("/api/auth/me", get(get_current_user))
         .route("/api/auth/logout", post(logout))
+        .route(
+            "/api/auth/tokens",
+            post(create_api_token).get(list_api_tokens),
+        )
+        .route("/api/auth/tokens/:id", delete(revoke_api_token))
 }
