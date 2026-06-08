@@ -84,6 +84,22 @@ enum Commands {
         /// Target language for offline generation
         #[arg(long, default_value = "python")]
         language: String,
+
+        /// Also score each case with the LLM-judge rubric (live mode; needs a key)
+        #[arg(long)]
+        rubric: bool,
+
+        /// Fail (non-zero exit) if mean reference-overall is below this threshold
+        #[arg(long)]
+        min_reference_overall: Option<f32>,
+
+        /// Fail (non-zero exit) if mean rubric score is below this threshold
+        #[arg(long)]
+        min_rubric: Option<f32>,
+
+        /// Baseline report JSON to guard against regressions
+        #[arg(long)]
+        baseline: Option<String>,
     },
 }
 
@@ -483,7 +499,16 @@ async fn main() -> Result<()> {
             output,
             offline,
             language,
+            rubric,
+            min_reference_overall,
+            min_rubric,
+            baseline,
         } => {
+            use paper2codes::benchmark::{
+                run_benchmark, BenchmarkReport, LlmRubricGrader, OfflineStubGenerator, QualityGate,
+                RubricGrader,
+            };
+
             let manifest_data = paper2codes::benchmark::BenchmarkManifest::load(&manifest)?;
             println!(
                 "Running benchmark{}{} over {} case(s)...",
@@ -497,15 +522,28 @@ async fn main() -> Result<()> {
             );
 
             // Offline mode uses a deterministic stub generator so the harness can
-            // be validated without API keys. Otherwise the real coordinator runs.
-            // Reference-based scoring is automatic; reference-free rubric grading
-            // is available via the RubricGrader trait.
+            // be validated without API keys. Otherwise the real coordinator runs,
+            // optionally with LLM-judge rubric grading.
             let report = if offline {
-                let generator = paper2codes::benchmark::OfflineStubGenerator::new(language);
-                paper2codes::benchmark::run_benchmark(&manifest_data, &generator, None).await
+                let generator = OfflineStubGenerator::new(language);
+                run_benchmark(&manifest_data, &generator, None).await
             } else {
                 let generator = CliRepoGenerator;
-                paper2codes::benchmark::run_benchmark(&manifest_data, &generator, None).await
+                // Build an LLM-judge grader from the configured default provider.
+                let grader: Option<Box<dyn RubricGrader>> = if rubric {
+                    let config = Config::load()?;
+                    let router = paper2codes::llm::LLMRouter::new(config)?;
+                    match router.default_client() {
+                        Some(client) => Some(Box::new(LlmRubricGrader::new(client))),
+                        None => {
+                            eprintln!("--rubric requested but no LLM client is available; skipping rubric grading");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                run_benchmark(&manifest_data, &generator, grader.as_deref()).await
             };
 
             println!("\n{}", report.to_markdown());
@@ -514,6 +552,38 @@ async fn main() -> Result<()> {
                 std::fs::write(&out, report.to_json()?)
                     .map_err(paper2codes::error::Paper2CodesError::Io)?;
                 println!("Report written to {}", out);
+            }
+
+            // Apply the quality gate when thresholds or a baseline are supplied.
+            let gate_active = min_reference_overall.is_some() || min_rubric.is_some() || baseline.is_some();
+            if gate_active {
+                let gate = QualityGate {
+                    min_reference_overall,
+                    min_rubric,
+                    allow_errors: false,
+                    ..QualityGate::default()
+                };
+                let baseline_report = match &baseline {
+                    Some(path) => {
+                        let json = std::fs::read_to_string(path)
+                            .map_err(paper2codes::error::Paper2CodesError::Io)?;
+                        Some(BenchmarkReport::from_json(&json)?)
+                    }
+                    None => None,
+                };
+                let violations = report.gate_violations(&gate, baseline_report.as_ref());
+                if violations.is_empty() {
+                    println!("\nQuality gate: PASS");
+                } else {
+                    eprintln!("\nQuality gate: FAIL");
+                    for v in &violations {
+                        eprintln!("  - {}", v);
+                    }
+                    return Err(paper2codes::error::Paper2CodesError::Validation(format!(
+                        "benchmark quality gate failed with {} violation(s)",
+                        violations.len()
+                    )));
+                }
             }
 
             Ok(())

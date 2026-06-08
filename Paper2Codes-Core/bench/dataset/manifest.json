@@ -48,6 +48,18 @@
       "paper_path": "papers/eoq.txt",
       "reference_repo": "refs/eoq",
       "skill_id": "computational-supply-chain"
+    },
+    {
+      "id": "mean-variance-portfolio",
+      "paper_path": "papers/mean-variance-portfolio.txt",
+      "reference_repo": "refs/mean-variance-portfolio",
+      "skill_id": "computational-finance"
+    },
+    {
+      "id": "verlet-integrator",
+      "paper_path": "papers/verlet-integrator.txt",
+      "reference_repo": "refs/verlet-integrator",
+      "skill_id": "computational-physics"
     }
   ]
 }

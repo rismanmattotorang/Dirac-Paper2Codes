@@ -15,10 +15,12 @@
 
 pub mod manifest;
 pub mod offline;
+pub mod rubric;
 pub mod scoring;
 
 pub use manifest::{BenchmarkCase, BenchmarkManifest};
 pub use offline::OfflineStubGenerator;
+pub use rubric::LlmRubricGrader;
 pub use scoring::{FileSetScore, ReferenceScore};
 
 use std::path::Path;
@@ -182,6 +184,86 @@ impl BenchmarkReport {
         serde_json::to_string_pretty(self).map_err(|e| {
             crate::error::Paper2CodesError::Validation(format!("Failed to serialize report: {}", e))
         })
+    }
+
+    /// Parse a report from JSON (e.g. a stored baseline).
+    pub fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json).map_err(|e| {
+            crate::error::Paper2CodesError::Validation(format!("Failed to parse report: {}", e))
+        })
+    }
+
+    /// Evaluate the report against a quality gate, returning a list of human
+    /// readable violations (empty = pass). Used to gate releases on benchmark
+    /// quality and guard against regressions vs. a baseline.
+    pub fn gate_violations(
+        &self,
+        gate: &QualityGate,
+        baseline: Option<&BenchmarkReport>,
+    ) -> Vec<String> {
+        let a = &self.aggregate;
+        let mut violations = Vec::new();
+
+        if let Some(min) = gate.min_reference_overall {
+            if a.mean_reference_overall < min {
+                violations.push(format!(
+                    "mean reference-overall {:.3} < required {:.3}",
+                    a.mean_reference_overall, min
+                ));
+            }
+        }
+        if let Some(min) = gate.min_rubric {
+            if a.mean_rubric < min {
+                violations.push(format!(
+                    "mean rubric {:.3} < required {:.3}",
+                    a.mean_rubric, min
+                ));
+            }
+        }
+        if !gate.allow_errors && a.error_count > 0 {
+            violations.push(format!("{} case(s) errored", a.error_count));
+        }
+
+        // No-regression check against a baseline (within tolerance).
+        if let Some(base) = baseline {
+            let tol = gate.regression_tolerance;
+            if a.mean_reference_overall + tol < base.aggregate.mean_reference_overall {
+                violations.push(format!(
+                    "reference-overall regressed {:.3} -> {:.3} (tolerance {:.3})",
+                    base.aggregate.mean_reference_overall, a.mean_reference_overall, tol
+                ));
+            }
+            if a.mean_rubric + tol < base.aggregate.mean_rubric {
+                violations.push(format!(
+                    "rubric regressed {:.3} -> {:.3} (tolerance {:.3})",
+                    base.aggregate.mean_rubric, a.mean_rubric, tol
+                ));
+            }
+        }
+
+        violations
+    }
+}
+
+/// Release quality gate thresholds (see PRODUCTION_PLAN.md §7).
+#[derive(Debug, Clone)]
+pub struct QualityGate {
+    pub min_reference_overall: Option<f32>,
+    pub min_rubric: Option<f32>,
+    /// Fail the gate if any case errored.
+    pub allow_errors: bool,
+    /// Permitted drop vs. a baseline before flagging a regression.
+    pub regression_tolerance: f32,
+}
+
+impl Default for QualityGate {
+    fn default() -> Self {
+        Self {
+            min_reference_overall: None,
+            min_rubric: None,
+            allow_errors: false,
+            regression_tolerance: 0.02,
+        }
     }
 }
 
@@ -389,6 +471,78 @@ mod tests {
         let md = report.to_markdown();
         assert!(md.contains("Benchmark Report: demo"));
         assert!(md.contains("Mean reference overall: 0.500"));
-        assert!(report.to_json().unwrap().contains("\"mean_rubric\""));
+        let json = report.to_json().unwrap();
+        assert!(json.contains("\"mean_rubric\""));
+        // Round-trips back from JSON (baseline loading).
+        let parsed = BenchmarkReport::from_json(&json).unwrap();
+        assert_eq!(parsed.aggregate.case_count, 1);
+    }
+
+    fn report_with(overall: f32, rubric: f32, errors: usize) -> BenchmarkReport {
+        let mut cases = vec![CaseResult {
+            id: "a".into(),
+            reference_overall: Some(overall),
+            file_f1: Some(overall),
+            content_similarity: Some(overall),
+            rubric_score: Some(rubric as f64),
+            error: None,
+        }];
+        for i in 0..errors {
+            cases.push(CaseResult {
+                id: format!("err{}", i),
+                reference_overall: None,
+                file_f1: None,
+                content_similarity: None,
+                rubric_score: None,
+                error: Some("boom".into()),
+            });
+        }
+        BenchmarkReport::from_cases(None, cases)
+    }
+
+    #[test]
+    fn gate_passes_when_thresholds_met() {
+        let report = report_with(0.8, 0.9, 0);
+        let gate = QualityGate {
+            min_reference_overall: Some(0.7),
+            min_rubric: Some(0.7),
+            allow_errors: false,
+            regression_tolerance: 0.02,
+        };
+        assert!(report.gate_violations(&gate, None).is_empty());
+    }
+
+    #[test]
+    fn gate_flags_low_scores_and_errors() {
+        let report = report_with(0.5, 0.4, 1);
+        let gate = QualityGate {
+            min_reference_overall: Some(0.7),
+            min_rubric: Some(0.7),
+            allow_errors: false,
+            regression_tolerance: 0.02,
+        };
+        let v = report.gate_violations(&gate, None);
+        assert_eq!(v.len(), 3); // overall, rubric, errors
+        assert!(v.iter().any(|s| s.contains("reference-overall")));
+        assert!(v.iter().any(|s| s.contains("rubric")));
+        assert!(v.iter().any(|s| s.contains("errored")));
+    }
+
+    #[test]
+    fn gate_detects_regression_vs_baseline() {
+        let baseline = report_with(0.80, 0.80, 0);
+        let current = report_with(0.70, 0.80, 0); // 0.10 drop > 0.02 tol
+        let gate = QualityGate {
+            min_reference_overall: None,
+            min_rubric: None,
+            allow_errors: true,
+            regression_tolerance: 0.02,
+        };
+        let v = current.gate_violations(&gate, Some(&baseline));
+        assert!(v.iter().any(|s| s.contains("regressed")));
+
+        // A small drop within tolerance is fine.
+        let small = report_with(0.79, 0.80, 0);
+        assert!(small.gate_violations(&gate, Some(&baseline)).is_empty());
     }
 }

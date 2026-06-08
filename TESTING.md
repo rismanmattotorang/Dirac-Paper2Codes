@@ -101,3 +101,32 @@ checkout to evaluate at scale.
 3. Inspect `report.json` / the Markdown summary: per-case file F1, content
    similarity, and overall scores. Add your own cases (with `skill_id`) to the
    manifest to measure domain-specific generation quality.
+
+### Reference-free rubric scoring (LLM-judge)
+
+Add `--rubric` to a live run to also score each case with an LLM-judge (0–1
+faithfulness), independent of any reference repo:
+
+```bash
+paper2codes bench --manifest Paper2Codes-Core/bench/dataset/manifest.json --rubric --output report.json
+```
+
+### Quality gate (release / regression gating)
+
+Fail the run (non-zero exit) when scores fall below a floor or regress vs. a
+baseline — use this in CI to gate releases (see [PRODUCTION_PLAN.md](PRODUCTION_PLAN.md) §7):
+
+```bash
+# Enforce a floor
+paper2codes bench ... --min-reference-overall 0.6 --min-rubric 0.6
+# Guard against regressions vs. a previous report
+paper2codes bench ... --baseline last-good-report.json
+```
+
+### Nightly benchmark workflow
+
+`.github/workflows/benchmark.yml` runs the benchmark on a schedule (and on
+manual dispatch) and uploads `report.json` as an artifact. It runs the **live**
+rubric + reference benchmark when an API-key secret (`OPENAI_API_KEY` /
+`ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`) is configured, and falls back to the
+**offline** smoke otherwise — so it is always green and informative.
