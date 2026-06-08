@@ -54,6 +54,14 @@ pub struct AppState {
     /// JWT service for authentication
     #[cfg(feature = "api")]
     pub jwt_service: Arc<JwtService>,
+    /// Stateful user store (auth)
+    #[cfg(feature = "api")]
+    pub user_store: Arc<crate::api::auth::UserStore>,
+    /// Stateful refresh-token session store (auth)
+    #[cfg(feature = "api")]
+    pub session_store: Arc<crate::api::auth::SessionStore>,
+    /// Durable job queue for long-running work (e.g. paper generation)
+    pub job_queue: Arc<crate::jobs::JobQueue>,
     /// WebSocket connection manager
     #[cfg(feature = "api")]
     pub websocket_manager: Arc<ConnectionManager>,
@@ -118,6 +126,37 @@ impl AppState {
         let jwt_service = Arc::new(JwtService::new(&config.api.auth)?);
 
         #[cfg(feature = "api")]
+        let user_store = Arc::new(crate::api::auth::UserStore::new());
+        #[cfg(feature = "api")]
+        {
+            // Seed an initial admin from env (ADMIN_USERNAME / ADMIN_PASSWORD,
+            // optional ADMIN_EMAIL) so a fresh deployment has a privileged account
+            // without baking credentials into the image.
+            if let (Ok(username), Ok(password)) =
+                (std::env::var("ADMIN_USERNAME"), std::env::var("ADMIN_PASSWORD"))
+            {
+                let email = std::env::var("ADMIN_EMAIL")
+                    .unwrap_or_else(|_| format!("{}@local", username));
+                match crate::api::auth::User::new(
+                    email,
+                    username.clone(),
+                    &password,
+                    vec![crate::api::auth::UserRole::Admin],
+                ) {
+                    Ok(user) => {
+                        user_store.upsert(user).await;
+                        tracing::info!("Seeded admin user '{}'", username);
+                    }
+                    Err(e) => tracing::warn!("Failed to seed admin user: {}", e),
+                }
+            }
+        }
+        #[cfg(feature = "api")]
+        let session_store = Arc::new(crate::api::auth::SessionStore::new());
+
+        let job_queue = Arc::new(crate::jobs::JobQueue::new());
+
+        #[cfg(feature = "api")]
         let websocket_manager = Arc::new(ConnectionManager::new());
 
         #[cfg(feature = "api")]
@@ -132,6 +171,11 @@ impl AppState {
             storage: Arc::new(RwLock::new(storage)),
             #[cfg(feature = "api")]
             jwt_service,
+            #[cfg(feature = "api")]
+            user_store,
+            #[cfg(feature = "api")]
+            session_store,
+            job_queue,
             #[cfg(feature = "api")]
             websocket_manager,
             #[cfg(feature = "api")]

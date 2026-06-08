@@ -66,6 +66,24 @@ impl ApiServer {
         // Create application state
         let app_state = Arc::new(AppState::new(config.clone()).await?);
 
+        // Phase 2: start the durable job worker that runs paper-generation jobs
+        // off the request path (survives restarts within the process, retries
+        // with backoff, trackable/cancellable).
+        {
+            let queue = app_state.job_queue.clone();
+            let handler = Arc::new(crate::api::handlers::papers_phase3::PaperJobHandler {
+                state: app_state.clone(),
+            });
+            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            tokio::spawn(crate::jobs::JobQueue::run_worker(
+                queue,
+                handler,
+                std::time::Duration::from_millis(500),
+                stop,
+            ));
+            info!("Started durable job worker for paper generation");
+        }
+
         // Create CORS layer
         let cors_layer = cors::cors_layer(&config);
 

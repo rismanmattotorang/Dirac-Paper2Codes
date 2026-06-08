@@ -1,6 +1,6 @@
 //! Authentication handlers
 
-use crate::api::auth::{CurrentUser, JwtService, User, UserRole, UserService};
+use crate::api::auth::{CurrentUser, User, UserRole, UserService};
 use crate::api::state::AppState;
 use crate::api::types::errors::ApiError as ApiErrorResponse;
 use crate::api::types::responses::ApiResponse;
@@ -107,32 +107,20 @@ pub async fn login(
         }
     }
 
-    // TODO: Load user from database
-    // For now, this is a placeholder implementation
-    // In production, you would:
-    // 1. Query database for user by email
-    // 2. Verify password
-    // 3. Generate tokens
-
-    // Placeholder: Create a mock user for demonstration
-    // In real implementation, load from database
-    let user = User::new(
-        request.email.clone(),
-        "demo_user".to_string(),
-        &request.password,
-        vec![UserRole::User],
-    )
-    .map_err(|e| {
+    // Load the user from the store (by username or email) and verify password.
+    // A generic error avoids leaking which accounts exist.
+    let invalid = || {
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiErrorResponse::internal_error(&format!(
-                "Failed to create user: {}",
-                e
-            ))),
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorResponse::unauthorized("Invalid credentials")),
         )
-    })?;
+    };
+    let user = app_state
+        .user_store
+        .find_by_login(&request.email)
+        .await
+        .ok_or_else(invalid)?;
 
-    // Verify password
     if !user.verify_password(&request.password).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -142,24 +130,19 @@ pub async fn login(
             ))),
         )
     })? {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            Json(ApiErrorResponse::unauthorized("Invalid email or password")),
-        ));
+        return Err(invalid());
     }
 
-    // Generate tokens
-    let jwt_service = JwtService::new(&app_state.config.api.auth).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiErrorResponse::internal_error(&format!(
-                "Failed to create JWT service: {}",
-                e
-            ))),
-        )
-    })?;
+    issue_session(&app_state, &user).await
+}
 
-    let access_token = jwt_service
+/// Issue access + refresh tokens for `user` and persist a session.
+async fn issue_session(
+    app_state: &Arc<AppState>,
+    user: &User,
+) -> std::result::Result<Json<ApiResponse<LoginResponse>>, (StatusCode, Json<ApiErrorResponse>)> {
+    let access_token = app_state
+        .jwt_service
         .generate_access_token(user.id.clone(), user.email.clone(), user.roles_as_strings())
         .map_err(|e| {
             (
@@ -171,7 +154,8 @@ pub async fn login(
             )
         })?;
 
-    let refresh_token = jwt_service
+    let refresh_token = app_state
+        .jwt_service
         .generate_refresh_token(user.id.clone(), user.email.clone(), user.roles_as_strings())
         .map_err(|e| {
             (
@@ -184,13 +168,19 @@ pub async fn login(
         })?;
 
     let expires_in = app_state.config.api.auth.jwt_expiration;
+    let refresh_expiry =
+        chrono::Utc::now() + chrono::Duration::seconds(app_state.config.api.auth.refresh_expiration as i64);
+    app_state
+        .session_store
+        .create(user.id.clone(), refresh_token.clone(), refresh_expiry)
+        .await;
 
     Ok(Json(ApiResponse::success(LoginResponse {
         access_token,
         refresh_token,
         token_type: "Bearer".to_string(),
         expires_in,
-        user: UserInfo::from(user),
+        user: UserInfo::from(user.clone()),
     })))
 }
 
@@ -244,70 +234,27 @@ pub async fn register(
         ));
     }
 
-    // TODO: Check if user already exists in database
-    // TODO: Create user in database
+    // Create the user in the store (rejects duplicate username/email). The
+    // first registered account becomes an admin; subsequent users are regular.
+    let first_user = app_state.user_store.count().await == 0;
+    let roles = if first_user {
+        vec![UserRole::Admin]
+    } else {
+        vec![UserRole::User]
+    };
 
-    // Create user
-    let user = User::new(
-        request.email,
-        request.username,
-        &request.password,
-        vec![UserRole::User], // Default role
-    )
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiErrorResponse::internal_error(&format!(
-                "Failed to create user: {}",
-                e
-            ))),
-        )
-    })?;
-
-    // Generate tokens
-    let jwt_service = JwtService::new(&app_state.config.api.auth).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiErrorResponse::internal_error(&format!(
-                "Failed to create JWT service: {}",
-                e
-            ))),
-        )
-    })?;
-
-    let access_token = jwt_service
-        .generate_access_token(user.id.clone(), user.email.clone(), user.roles_as_strings())
+    let user = app_state
+        .user_store
+        .register(request.email, request.username, &request.password, roles)
+        .await
         .map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiErrorResponse::internal_error(&format!(
-                    "Failed to generate access token: {}",
-                    e
-                ))),
+                StatusCode::CONFLICT,
+                Json(ApiErrorResponse::validation_error_simple(&e.to_string())),
             )
         })?;
 
-    let refresh_token = jwt_service
-        .generate_refresh_token(user.id.clone(), user.email.clone(), user.roles_as_strings())
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiErrorResponse::internal_error(&format!(
-                    "Failed to generate refresh token: {}",
-                    e
-                ))),
-            )
-        })?;
-
-    let expires_in = app_state.config.api.auth.jwt_expiration;
-
-    Ok(Json(ApiResponse::success(LoginResponse {
-        access_token,
-        refresh_token,
-        token_type: "Bearer".to_string(),
-        expires_in,
-        user: UserInfo::from(user),
-    })))
+    issue_session(&app_state, &user).await
 }
 
 /// Refresh token handler
@@ -315,97 +262,74 @@ pub async fn refresh_token(
     Extension(app_state): Extension<Arc<AppState>>,
     Json(request): Json<RefreshTokenRequest>,
 ) -> std::result::Result<Json<ApiResponse<LoginResponse>>, (StatusCode, Json<ApiErrorResponse>)> {
-    let jwt_service = JwtService::new(&app_state.config.api.auth).map_err(|e| {
+    let unauthorized = || {
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiErrorResponse::internal_error(&format!(
-                "Failed to create JWT service: {}",
-                e
-            ))),
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorResponse::unauthorized(
+                "Invalid or expired refresh token",
+            )),
         )
-    })?;
+    };
 
-    // Validate refresh token
-    let claims = jwt_service
+    // Validate the refresh token signature/expiry...
+    let claims = app_state
+        .jwt_service
         .validate_refresh_token(&request.refresh_token)
-        .map_err(|_| {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ApiErrorResponse::unauthorized(
-                    "Invalid or expired refresh token",
-                )),
-            )
-        })?;
+        .map_err(|_| unauthorized())?;
 
-    // TODO: Load user from database using claims.sub
-    // For now, use claims directly
+    // ...and confirm the session still exists (i.e. has not been revoked).
+    if app_state
+        .session_store
+        .get_by_refresh(&request.refresh_token)
+        .await
+        .is_none()
+    {
+        return Err(unauthorized());
+    }
 
-    // Generate new tokens
-    let access_token = jwt_service
-        .generate_access_token(
-            claims.sub.clone(),
-            claims.email.clone(),
-            claims.roles.clone(),
-        )
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiErrorResponse::internal_error(&format!(
-                    "Failed to generate access token: {}",
-                    e
-                ))),
-            )
-        })?;
+    // Rotate: revoke the old session, then load the user and issue a new one.
+    app_state
+        .session_store
+        .revoke_by_refresh(&request.refresh_token)
+        .await;
 
-    let refresh_token = jwt_service
-        .generate_refresh_token(
-            claims.sub.clone(),
-            claims.email.clone(),
-            claims.roles.clone(),
-        )
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiErrorResponse::internal_error(&format!(
-                    "Failed to generate refresh token: {}",
-                    e
-                ))),
-            )
-        })?;
+    let user = app_state
+        .user_store
+        .find_by_id(&claims.sub)
+        .await
+        .ok_or_else(unauthorized)?;
 
-    let expires_in = app_state.config.api.auth.jwt_expiration;
-
-    // TODO: Load user from database for UserInfo
-    // For now, create minimal user info from claims
-    Ok(Json(ApiResponse::success(LoginResponse {
-        access_token,
-        refresh_token,
-        token_type: "Bearer".to_string(),
-        expires_in,
-        user: UserInfo {
-            id: claims.sub,
-            email: claims.email,
-            username: "user".to_string(), // TODO: Load from database
-            roles: claims.roles,
-        },
-    })))
+    issue_session(&app_state, &user).await
 }
 
 /// Get current user handler
-pub async fn get_current_user(user: CurrentUser) -> Json<ApiResponse<UserInfo>> {
+pub async fn get_current_user(
+    Extension(app_state): Extension<Arc<AppState>>,
+    user: CurrentUser,
+) -> Json<ApiResponse<UserInfo>> {
+    let username = app_state
+        .user_store
+        .find_by_id(&user.user_id)
+        .await
+        .map(|u| u.username)
+        .unwrap_or_else(|| "user".to_string());
     Json(ApiResponse::success(UserInfo {
         id: user.user_id,
         email: user.email,
-        username: "user".to_string(), // TODO: Load from database
+        username,
         roles: user.roles,
     }))
 }
 
-/// Logout handler (client-side token removal, server-side session invalidation)
-pub async fn logout() -> Json<ApiResponse<()>> {
-    // In a stateless JWT system, logout is primarily client-side
-    // Server can maintain a blacklist of tokens if needed
-    // For now, just return success
+/// Logout handler — revokes the server-side session for the given refresh token.
+pub async fn logout(
+    Extension(app_state): Extension<Arc<AppState>>,
+    Json(request): Json<RefreshTokenRequest>,
+) -> Json<ApiResponse<()>> {
+    app_state
+        .session_store
+        .revoke_by_refresh(&request.refresh_token)
+        .await;
     Json(ApiResponse::success(()))
 }
 
