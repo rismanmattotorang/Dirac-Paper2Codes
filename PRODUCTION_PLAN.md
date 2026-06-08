@@ -66,10 +66,13 @@ production** — to a reliable, secure, observable production service.
 - ✅ **Supply-chain audit** CI job (`cargo audit` + `pnpm audit`, informational).
 
 - ✅ **Real auth**: stateful `UserStore` + `SessionStore`; `register`/`login`/`refresh` (with refresh-token rotation + session revocation)/`logout`/`me` wired to the stores; first account becomes admin; env-seeded admin (`ADMIN_USERNAME`/`ADMIN_PASSWORD`); RBAC roles on claims; settings session list/revoke now use the live store.
+- ✅ **SurrealDB-backed persistence** for users, sessions, and the job queue: a write-through + load-on-startup seam (`AuthPersistence` / `JobStore`) keeps the in-memory map as a cache and rehydrates on boot; the env admin is only seeded when absent, so restarts don't duplicate it.
+- ✅ **Personal API tokens** (`ApiTokenStore`, `p2c_…`): create/list/revoke endpoints (`/api/auth/tokens`), SHA-256-hashed at rest (plaintext shown once), accepted by the `CurrentUser` extractor as a bearer credential, and durably persisted via the same seam.
+- ✅ **Web UI login/token-refresh UX**: a login/register dialog + auth context, the API client transparently refreshes on `401` and replays the request (coalescing concurrent refreshes), and a Settings → Security panel manages API tokens.
 
 *Remaining (infra / larger work):*
 - Integrate a managed **secret manager** (Vault / cloud KMS / k8s Secrets) + rotation; encrypt-at-rest.
-- Persist users/sessions in SurrealDB (currently in-memory); add **2FA** and per-user API tokens; finish Web UI login/token-refresh UX.
+- Add **2FA** (TOTP): deferred — needs an HMAC/OTP dependency not yet vendored; the data model and Web UI Security tab are ready to host it.
 - Harden SurrealDB deployment: non-default creds wired via secrets, least-privilege user, network isolation, TLS.
 - Add **SAST** (CodeQL) + **secret scanning** (gitleaks) + an **SBOM** per release; promote audits to required.
 - **Exit criteria:** secret-scan clean; no default credentials anywhere; auth flows tested; threat model documented.
@@ -82,7 +85,7 @@ production** — to a reliable, secure, observable production service.
 - ✅ **Generation routed through the queue**: `POST /api/papers/:id/process` now enqueues a `paper_generation` job; a worker started in the API bootstrap runs the pipeline via `PaperJobHandler` (replacing the fire-and-forget spawn).
 
 *Remaining (infra / wiring):*
-- Back the queue + user/session stores with SurrealDB for cross-process/-restart durability (currently in-memory, durable within the process).
+- ✅ Queue + user/session/token stores are now SurrealDB-backed (write-through + restore); a worker crash leaves jobs `Running` which `restore` resets to `Pending` so they are re-claimed. *(Cross-restart durability verified in-memory via mock stores; the live SurrealDB path is compile-checked — needs a DB to exercise end-to-end.)*
 - Stronger isolation tier (gVisor/Firecracker) + seccomp profile for the execution image.
 - Per-tenant rate limits/quotas, provider circuit breakers, and spend metrics.
 - **Exit criteria:** generated code can never touch the host; a worker crash/restart loses no work; a runaway paper can't exceed its budget.

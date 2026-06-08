@@ -6,6 +6,7 @@ import { formatDistanceToNow } from "date-fns"
 import { settingsApi, type SettingsResponse, type UpdateSettingsRequest } from "@/lib/api/settings"
 import { useToast } from "@/hooks/use-toast"
 import { ApiKeysPanel } from "@/components/settings/api-keys-panel"
+import { ApiTokensPanel } from "@/components/settings/api-tokens-panel"
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general")
@@ -316,11 +317,13 @@ function SecuritySettings({ settings }: { settings: SettingsResponse }) {
           ))}
         </div>
       </div>
+
+      <ApiTokensPanel />
     </div>
   )
 }
 
-function NotificationSettings({ settings, setSettings }: { 
+function NotificationSettings({ settings, setSettings }: {
   settings: SettingsResponse; 
   setSettings: React.Dispatch<React.SetStateAction<SettingsResponse | null>> 
 }) {

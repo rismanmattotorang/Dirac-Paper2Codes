@@ -16,6 +16,7 @@ import type {
   PaginationQuery,
 } from './types';
 import { ApiClientError, isRetryableError, isNonRetryableError } from './errors';
+import { attemptRefresh, clearSession, getAccessToken, isAuthEndpoint } from './auth';
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -72,16 +73,21 @@ export class ApiClient {
       });
     }
 
-    const requestHeaders = {
+    let requestHeaders = {
       ...this.defaultHeaders,
       ...headers,
       ...this.getAuthHeaders(),
     };
 
     let lastError: ApiClientError | null = null;
+    // On a 401 we transparently refresh the access token and replay the
+    // request once. `extraAttempts` grants that single replay without spending
+    // the caller's normal retry budget.
+    let authRetried = false;
+    let extraAttempts = 0;
 
     // Retry loop
-    for (let attempt = 0; attempt <= retries; attempt++) {
+    for (let attempt = 0; attempt <= retries + extraAttempts; attempt++) {
       const controller = new AbortController();
       const timeoutMs = options.timeout ?? this.requestTimeoutMs;
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -199,6 +205,19 @@ export class ApiClient {
           lastError = error;
 
           if (response.status === 401) {
+            // Try a one-shot token refresh + replay before giving up. Skip for
+            // the auth endpoints themselves to avoid refresh recursion.
+            if (!authRetried && !isAuthEndpoint(endpoint)) {
+              authRetried = true;
+              const refreshed = await attemptRefresh();
+              if (refreshed) {
+                requestHeaders = { ...requestHeaders, ...this.getAuthHeaders() };
+                extraAttempts++;
+                continue;
+              }
+            }
+            // Refresh unavailable or failed: the session is dead.
+            clearSession();
             throw error;
           }
 
@@ -378,19 +397,15 @@ export class ApiClient {
    * Get authentication headers
    */
   private getAuthHeaders(): Record<string, string> {
-    // TODO: Implement authentication token retrieval
     const token = this.getAuthToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   /**
-   * Get authentication token
+   * Get authentication token (shared storage with the auth module).
    */
   private getAuthToken(): string {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token') || '';
-    }
-    return '';
+    return getAccessToken();
   }
 
   /**

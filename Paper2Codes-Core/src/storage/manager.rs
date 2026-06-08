@@ -433,6 +433,35 @@ impl StorageManager {
         storage.list_jobs().await
     }
 
+    // ---- Personal API token persistence ----
+
+    #[cfg(feature = "api")]
+    pub async fn save_api_token(&self, token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.save_api_token(token).await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn list_api_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.list_api_tokens().await
+    }
+
+    #[cfg(feature = "api")]
+    pub async fn delete_api_token(&self, id: &str) -> Result<()> {
+        let storage_guard = self.storage.read().await;
+        let storage = storage_guard
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected)?;
+        storage.delete_api_token(id).await
+    }
+
     /// Perform vector search
     pub async fn vector_search(
         &self,
@@ -490,5 +519,22 @@ impl crate::api::auth::store::AuthPersistence for StorageManager {
 
     async fn delete_session(&self, refresh_token: &str) -> Result<()> {
         StorageManager::delete_session(self, refresh_token).await
+    }
+}
+
+/// Durable backing for personal API tokens.
+#[cfg(feature = "api")]
+#[async_trait::async_trait]
+impl crate::api::auth::tokens::ApiTokenPersistence for StorageManager {
+    async fn load_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        self.list_api_tokens().await
+    }
+
+    async fn save_token(&self, token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        StorageManager::save_api_token(self, token).await
+    }
+
+    async fn delete_token(&self, id: &str) -> Result<()> {
+        StorageManager::delete_api_token(self, id).await
     }
 }

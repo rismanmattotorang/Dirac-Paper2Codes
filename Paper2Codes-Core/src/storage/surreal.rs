@@ -1693,6 +1693,65 @@ impl Storage for SurrealStorage {
         }
         Ok(jobs)
     }
+
+    async fn save_api_token(&self, token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        let db = self.db()?;
+
+        let data = serde_json::to_string(token).map_err(|e| {
+            StorageError::Serialization(format!("Failed to serialize api token: {}", e))
+        })?;
+
+        #[derive(serde::Serialize)]
+        struct TokenContent {
+            data: String,
+            user_id: String,
+        }
+
+        let _: Option<serde_json::Value> = db
+            .update(("api_token", token.id.clone()))
+            .content(TokenContent {
+                data,
+                user_id: token.user_id.clone(),
+            })
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to save api token: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn list_api_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        let db = self.db()?;
+
+        #[derive(serde::Deserialize)]
+        struct TokenRow {
+            data: String,
+        }
+
+        let rows: Vec<TokenRow> = db
+            .select("api_token")
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to list api tokens: {}", e)))?;
+
+        let mut tokens = Vec::new();
+        for row in rows {
+            match serde_json::from_str::<crate::api::auth::tokens::ApiToken>(&row.data) {
+                Ok(t) => tokens.push(t),
+                Err(e) => tracing::warn!(error = %e, "skipping unparseable api token record"),
+            }
+        }
+        Ok(tokens)
+    }
+
+    async fn delete_api_token(&self, id: &str) -> Result<()> {
+        let db = self.db()?;
+
+        let _: Option<serde_json::Value> = db
+            .delete(("api_token", id))
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to delete api token: {}", e)))?;
+
+        Ok(())
+    }
 }
 
 impl Default for SurrealStorage {

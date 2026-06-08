@@ -60,6 +60,9 @@ pub struct AppState {
     /// Stateful refresh-token session store (auth)
     #[cfg(feature = "api")]
     pub session_store: Arc<crate::api::auth::SessionStore>,
+    /// Personal API token store (programmatic auth)
+    #[cfg(feature = "api")]
+    pub api_token_store: Arc<crate::api::auth::ApiTokenStore>,
     /// Durable job queue for long-running work (e.g. paper generation)
     pub job_queue: Arc<crate::jobs::JobQueue>,
     /// WebSocket connection manager
@@ -132,6 +135,10 @@ impl AppState {
         let auth_persistence: Option<Arc<dyn crate::api::auth::AuthPersistence>> = storage
             .as_ref()
             .map(|m| Arc::new(m.clone()) as Arc<dyn crate::api::auth::AuthPersistence>);
+        #[cfg(feature = "api")]
+        let token_persistence: Option<Arc<dyn crate::api::auth::ApiTokenPersistence>> = storage
+            .as_ref()
+            .map(|m| Arc::new(m.clone()) as Arc<dyn crate::api::auth::ApiTokenPersistence>);
         let job_persistence: Option<Arc<dyn crate::jobs::JobStore>> = storage
             .as_ref()
             .map(|m| Arc::new(m.clone()) as Arc<dyn crate::jobs::JobStore>);
@@ -195,6 +202,20 @@ impl AppState {
             }
             store
         };
+        #[cfg(feature = "api")]
+        let api_token_store = {
+            let mut store = crate::api::auth::ApiTokenStore::new();
+            if let Some(p) = token_persistence {
+                store = store.with_persistence(p);
+            }
+            let store = Arc::new(store);
+            match store.restore().await {
+                Ok(n) if n > 0 => tracing::info!("Restored {} API token(s) from storage", n),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("Failed to restore API tokens from storage: {}", e),
+            }
+            store
+        };
 
         let job_queue = {
             let mut queue = crate::jobs::JobQueue::new();
@@ -231,6 +252,8 @@ impl AppState {
             user_store,
             #[cfg(feature = "api")]
             session_store,
+            #[cfg(feature = "api")]
+            api_token_store,
             job_queue,
             #[cfg(feature = "api")]
             websocket_manager,

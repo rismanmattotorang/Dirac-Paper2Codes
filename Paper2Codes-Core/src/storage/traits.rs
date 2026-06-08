@@ -132,6 +132,18 @@ pub trait Storage: Send + Sync {
         Ok(Vec::new())
     }
 
+    // Personal API tokens. Defaulted so backends without token persistence are
+    // unaffected (the store then operates in-memory only).
+    async fn save_api_token(&self, _token: &crate::api::auth::tokens::ApiToken) -> Result<()> {
+        Ok(())
+    }
+    async fn list_api_tokens(&self) -> Result<Vec<crate::api::auth::tokens::ApiToken>> {
+        Ok(Vec::new())
+    }
+    async fn delete_api_token(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+
     // Admin operations (optional - may not be supported by all backends)
     async fn execute_raw_query(&self, _query: &str) -> Result<serde_json::Value> {
         Err(crate::storage::errors::StorageError::NotSupported(
