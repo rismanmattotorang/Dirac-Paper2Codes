@@ -27,41 +27,97 @@ impl DocumentParser {
         self.parse_text(&text, title).await
     }
 
-    /// Extract text from PDF file using the pdf crate
-    /// Note: The pdf crate has limited text extraction capabilities.
-    /// For production use, consider using pdf-extract or similar specialized library.
+    /// Extract text from a PDF using the `pdf` crate's content-operator stream.
+    ///
+    /// Walks every page's content operations and reconstructs the text from the
+    /// text-showing operators (`Tj` / `TJ`), using the `TJ` adjustment spacing
+    /// as a heuristic for inter-word gaps and `T*` for line breaks. This handles
+    /// the common case of text-based research PDFs; image-only (scanned) PDFs
+    /// carry no text operators and yield an explicit, actionable error.
     fn extract_pdf_text(path: &Path) -> Result<String> {
+        use pdf::content::{Op, TextDrawAdjusted};
         use pdf::file::FileOptions;
         use std::io::Read;
 
         info!("Extracting text from PDF: {:?}", path);
 
-        // Read PDF file
-        let mut file = std::fs::File::open(path)
+        let mut file_handle = std::fs::File::open(path)
             .map_err(|e| DocumentError::ParseFailed(format!("Failed to open PDF file: {}", e)))?;
-
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)
+        file_handle
+            .read_to_end(&mut buffer)
             .map_err(|e| DocumentError::ParseFailed(format!("Failed to read PDF file: {}", e)))?;
 
-        // Parse PDF to validate it's a valid PDF
-        let _file = FileOptions::cached()
+        let file = FileOptions::cached()
             .password(b"")
             .load(&buffer[..])
             .map_err(|e| DocumentError::ParseFailed(format!("Failed to parse PDF: {}", e)))?;
 
-        // The pdf crate (v0.8) has limited text extraction capabilities.
-        // For now, we return an error suggesting the user convert to text format.
-        // In production, you should use a specialized PDF text extraction library like pdf-extract.
-        Err(DocumentError::ParseFailed(
-            format!(
-                "PDF text extraction is not fully supported. Please convert the PDF to text format first.\n\
-                You can use tools like pdftotext or online converters.\n\
-                File: {:?}\n\
-                Alternatively, use the parse_text() method with the extracted text content.",
+        // `TJ` spacing is in thousandths of a text-space unit; a sufficiently
+        // negative adjustment denotes an inter-word space in practice.
+        const WORD_GAP_THRESHOLD: f32 = -100.0;
+
+        let mut text = String::new();
+        let mut pages_rendered = 0usize;
+        for page in file.pages() {
+            let page = match page {
+                Ok(p) => p,
+                Err(e) => {
+                    info!("Skipping unreadable PDF page: {}", e);
+                    continue;
+                }
+            };
+            let Some(content) = &page.contents else {
+                continue;
+            };
+            let ops = match content.operations(&file) {
+                Ok(ops) => ops,
+                Err(e) => {
+                    info!("Skipping page with undecodable content: {}", e);
+                    continue;
+                }
+            };
+            for op in ops {
+                match op {
+                    Op::TextDraw { text: s } => {
+                        text.push_str(&s.to_string_lossy());
+                        text.push(' ');
+                    }
+                    Op::TextDrawAdjusted { array } => {
+                        for part in array {
+                            match part {
+                                TextDrawAdjusted::Text(s) => text.push_str(&s.to_string_lossy()),
+                                TextDrawAdjusted::Spacing(gap) if gap < WORD_GAP_THRESHOLD => {
+                                    text.push(' ')
+                                }
+                                TextDrawAdjusted::Spacing(_) => {}
+                            }
+                        }
+                        text.push(' ');
+                    }
+                    Op::TextNewline => text.push('\n'),
+                    _ => {}
+                }
+            }
+            text.push('\n');
+            pages_rendered += 1;
+        }
+
+        if text.trim().is_empty() {
+            return Err(DocumentError::ParseFailed(format!(
+                "No extractable text found in PDF (it may be a scanned/image-only \
+                 document — OCR is required, or supply a text version). File: {:?}",
                 path
-            )
-        ).into())
+            ))
+            .into());
+        }
+
+        info!(
+            "Extracted {} characters of text from {} PDF page(s)",
+            text.len(),
+            pages_rendered
+        );
+        Ok(text)
     }
 
     /// Parse text content and create a Paper structure
