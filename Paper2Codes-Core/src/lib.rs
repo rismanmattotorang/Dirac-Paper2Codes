@@ -67,6 +67,7 @@ pub mod error;
 pub mod evaluation;
 pub mod execution;
 pub mod github;
+pub mod jobs;
 pub mod llm;
 pub mod performance;
 pub mod prompts;

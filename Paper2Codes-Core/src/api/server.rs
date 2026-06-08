@@ -59,6 +59,10 @@ impl ApiServer {
     pub async fn new(config: Config) -> Result<Self> {
         info!("Initializing API server...");
 
+        // Phase 1: fail closed on insecure configuration in production
+        // (PAPER2CODES_ENV=production); warn otherwise.
+        config.enforce_security(crate::config::is_production())?;
+
         // Create application state
         let app_state = Arc::new(AppState::new(config.clone()).await?);
 

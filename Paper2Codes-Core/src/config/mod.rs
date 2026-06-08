@@ -1,8 +1,10 @@
 pub mod builder;
 pub mod loader;
+pub mod security;
 pub mod validation;
 
 pub use loader::ConfigLoader;
+pub use security::{is_production, redact};
 pub use validation::ConfigValidator;
 
 use serde::{Deserialize, Serialize};
