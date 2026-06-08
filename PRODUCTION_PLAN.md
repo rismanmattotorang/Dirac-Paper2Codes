@@ -91,8 +91,12 @@ production** — to a reliable, secure, observable production service.
 - **Exit criteria:** generated code can never touch the host; a worker crash/restart loses no work; a runaway paper can't exceed its budget.
 
 ### Phase 3 — Generated-artifact UX & data lifecycle
-- Bind the Web UI **Generated Code** page to the processed paper/run; stream progress (already have WebSocket plumbing) and surface verification results.
-- Repository persistence + download (zip already exists) tied to paper + run id; versioning.
+*Shipped (code-level):*
+- ✅ **Durable job inspection API** (`GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/cancel`): exposes the queue read-only + cancel, with the originating `paper_id` parsed out of `paper_generation` payloads and a `paper_id`/`status` filter. `POST /api/papers/:id/process` now returns the `job_id`.
+- ✅ **Generation-runs UI**: the Web UI **Generated Code** page surfaces live job status/progress/retries/errors (polling while work is outstanding) and can cancel in-flight runs; repository browse + zip download remain wired.
+
+*Remaining:*
+- Bind a run directly to its generated repository id (the pipeline doesn't yet stamp `paper_id` on `Repository`); stream progress via the existing WebSocket plumbing and surface verification results inline.
 - Data retention/privacy: uploaded papers may be copyrighted/PII — define retention, deletion, and access policies.
 - **Exit criteria:** upload → watch progress → browse/download verified repo, all in the UI for a real run.
 

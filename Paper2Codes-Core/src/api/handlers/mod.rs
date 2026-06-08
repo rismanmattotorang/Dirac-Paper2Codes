@@ -8,6 +8,8 @@ pub mod batch;
 pub mod files;
 pub mod health;
 #[cfg(feature = "api")]
+pub mod jobs;
+#[cfg(feature = "api")]
 pub mod llm_keys;
 #[cfg(feature = "api")]
 pub mod metrics;

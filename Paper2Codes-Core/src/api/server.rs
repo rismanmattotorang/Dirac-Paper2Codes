@@ -172,6 +172,15 @@ impl ApiServer {
                 .route("/api/papers/:id/segments", get(get_paper_segments))
                 .route("/api/papers/search", post(search_papers));
 
+            // Durable job inspection (generation runs)
+            protected_routes = protected_routes
+                .route("/api/jobs", get(crate::api::handlers::jobs::list_jobs))
+                .route("/api/jobs/:id", get(crate::api::handlers::jobs::get_job))
+                .route(
+                    "/api/jobs/:id/cancel",
+                    post(crate::api::handlers::jobs::cancel_job),
+                );
+
             // Phase 5: Streaming endpoints (SSE)
             protected_routes = protected_routes
                 .route(

@@ -11,4 +11,5 @@ export * from './repositories';
 export * from './analytics';
 export * from './tools';
 export * from './papers';
+export * from './jobs';
 export { apiClient } from './client';

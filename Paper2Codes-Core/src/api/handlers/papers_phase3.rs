@@ -415,6 +415,7 @@ pub async fn process_paper(
         error: None,
         created_at: chrono::Utc::now().to_rfc3339(),
         updated_at: chrono::Utc::now().to_rfc3339(),
+        job_id: Some(job_id.to_string()),
     };
 
     info!(request_id = %request_id, paper_id = %id, "Started paper processing");
@@ -844,6 +845,7 @@ pub async fn get_processing_status(
         error: None,
         created_at: chrono::Utc::now().to_rfc3339(),
         updated_at: chrono::Utc::now().to_rfc3339(),
+        job_id: None,
     };
 
     Ok(Json(ApiResponse::with_request_id(

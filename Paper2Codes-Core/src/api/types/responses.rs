@@ -159,6 +159,10 @@ pub struct ProcessingStatusResponse {
     pub error: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Id of the durable generation job, when processing was enqueued. Lets the
+    /// Web UI poll `/api/jobs/:id` for live progress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
