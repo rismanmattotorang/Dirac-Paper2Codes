@@ -59,17 +59,29 @@ production** — to a reliable, secure, observable production service.
 - **Exit criteria:** reproducible benchmark report; agreed score floor; ≥1 end-to-end paper→repo run reviewed by a domain expert.
 
 ### Phase 1 — Security & secrets hardening
-- Replace `config.toml` plaintext keys with a **secret manager** (Vault / cloud KMS / k8s Secrets); encrypt-at-rest; rotate.
-- Generate a strong `jwt_secret` per environment; enforce non-default at boot (fail closed).
-- Real **auth**: finish password policy, sessions, and 2FA (currently mocked); add RBAC and per-user API tokens; fix Web UI token handling (no `localStorage` TODO).
-- Harden SurrealDB: non-default credentials, least-privilege user, network isolation, TLS.
-- Dependency & supply-chain scanning in CI: `cargo audit`, `pnpm audit`, SAST (e.g. CodeQL), and an SBOM per release.
+*Shipped (code-level):*
+- ✅ **Fail-closed security validation** (`Config::security_issues` / `enforce_security`): rejects the default `jwt_secret`, short secrets, and default `root/root` SurrealDB creds. Wired into API startup — **hard error in production** (`PAPER2CODES_ENV=production`), warnings otherwise.
+- ✅ **Secret-file loading** (`*_FILE` convention for `JWT_SECRET`, `DATABASE_PASS`, `<PROVIDER>_API_KEY`) — keeps plaintext secrets out of config files (Docker/k8s/systemd secrets).
+- ✅ **Secret redaction** helper (`config::redact`).
+- ✅ **Supply-chain audit** CI job (`cargo audit` + `pnpm audit`, informational).
+
+*Remaining (infra / larger work):*
+- Integrate a managed **secret manager** (Vault / cloud KMS / k8s Secrets) + rotation; encrypt-at-rest.
+- Real **auth**: finish password policy, sessions, 2FA (currently mocked); RBAC + per-user API tokens; fix Web UI token handling.
+- Harden SurrealDB deployment: non-default creds wired via secrets, least-privilege user, network isolation, TLS.
+- Add **SAST** (CodeQL) + **secret scanning** (gitleaks) + an **SBOM** per release; promote audits to required.
 - **Exit criteria:** secret-scan clean; no default credentials anywhere; auth flows tested; threat model documented.
 
 ### Phase 2 — Safe, durable execution
-- **Sandbox** for generated-code verification: isolate with gVisor/Firecracker or rootless containers; no host FS, no outbound network by default, CPU/mem/time limits, seccomp. (Today's `bollard`/docker path must be treated as untrusted-code execution.)
-- **Durable job queue**: move generation off in-process `tokio::spawn` to a persisted task/worker model (DB-backed queue or Redis/NATS) so runs survive restarts, can retry, and scale horizontally. Persist task state + progress; resume/cancel.
-- **Cost controls**: per-run token budgets, per-tenant rate limits/quotas, circuit breakers on provider errors, spend metrics.
+*Shipped (code-level):*
+- ✅ **Sandbox hardening** (`execution::SandboxPolicy` + `docker_security_flags`): read-only rootfs, `--cap-drop ALL`, `no-new-privileges`, pids limit, non-root user, tmpfs scratch, no swap — applied on top of the existing network-isolation + read-only mount.
+- ✅ **Durable job queue** (`jobs::JobQueue`): persisted job state (status/attempts/progress/last-error), claim/complete/**retry with exponential backoff**/cancel, and a `JobHandler` worker loop. Serialisable `Job` model maps onto SurrealDB for cross-restart durability.
+- ✅ **Per-run token budget** (`llm::TokenBudget`): atomic, rejects overspend.
+
+*Remaining (infra / wiring):*
+- Back the queue with SurrealDB (cross-process/-restart durability) and route the API generation path through it (replace the in-process spawn); start the worker in the server bootstrap.
+- Stronger isolation tier (gVisor/Firecracker) + seccomp profile for the execution image.
+- Per-tenant rate limits/quotas, provider circuit breakers, and spend metrics; wire `TokenBudget` into the router/coordinator per run.
 - **Exit criteria:** generated code can never touch the host; a worker crash/restart loses no work; a runaway paper can't exceed its budget.
 
 ### Phase 3 — Generated-artifact UX & data lifecycle

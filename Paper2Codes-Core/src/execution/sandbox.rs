@@ -6,6 +6,69 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
 
+/// Hardening policy applied to Docker-based execution of untrusted, generated
+/// code (Phase 2). Defaults are locked down: no capabilities, read-only root
+/// filesystem, no privilege escalation, a non-root user, a bounded process
+/// count, and a small writable tmpfs. Network isolation and a read-only code
+/// mount are always applied by the runner in addition to these flags.
+#[derive(Debug, Clone)]
+pub struct SandboxPolicy {
+    pub read_only_rootfs: bool,
+    pub drop_all_capabilities: bool,
+    pub no_new_privileges: bool,
+    pub pids_limit: Option<u32>,
+    /// `uid:gid` to run as (e.g. `"65534:65534"` = nobody).
+    pub run_as_user: Option<String>,
+    /// Size of a writable `/tmp` tmpfs in MB (so a read-only rootfs can still
+    /// write scratch files).
+    pub tmpfs_tmp_mb: Option<u32>,
+    /// Disable swap (set `--memory-swap` equal to the memory limit).
+    pub disable_swap: bool,
+}
+
+impl Default for SandboxPolicy {
+    fn default() -> Self {
+        Self {
+            read_only_rootfs: true,
+            drop_all_capabilities: true,
+            no_new_privileges: true,
+            pids_limit: Some(256),
+            run_as_user: Some("65534:65534".to_string()),
+            tmpfs_tmp_mb: Some(64),
+            disable_swap: true,
+        }
+    }
+}
+
+/// Build the `docker run` security flags for a policy. Pure (no I/O) for testing.
+pub fn docker_security_flags(policy: &SandboxPolicy) -> Vec<String> {
+    let mut flags = Vec::new();
+    if policy.read_only_rootfs {
+        flags.push("--read-only".to_string());
+    }
+    if policy.drop_all_capabilities {
+        flags.push("--cap-drop".to_string());
+        flags.push("ALL".to_string());
+    }
+    if policy.no_new_privileges {
+        flags.push("--security-opt".to_string());
+        flags.push("no-new-privileges".to_string());
+    }
+    if let Some(pids) = policy.pids_limit {
+        flags.push("--pids-limit".to_string());
+        flags.push(pids.to_string());
+    }
+    if let Some(user) = &policy.run_as_user {
+        flags.push("--user".to_string());
+        flags.push(user.clone());
+    }
+    if let Some(mb) = policy.tmpfs_tmp_mb {
+        flags.push("--tmpfs".to_string());
+        flags.push(format!("/tmp:rw,size={}m", mb));
+    }
+    flags
+}
+
 #[derive(Clone)]
 pub struct SandboxRunner {
     timeout: Duration,
@@ -14,6 +77,7 @@ pub struct SandboxRunner {
     docker_image: Option<String>,
     memory_limit_mb: Option<usize>,
     cpu_limit: Option<f32>,
+    policy: SandboxPolicy,
 }
 
 impl SandboxRunner {
@@ -25,7 +89,14 @@ impl SandboxRunner {
             docker_image: None,
             memory_limit_mb: None,
             cpu_limit: None,
+            policy: SandboxPolicy::default(),
         }
+    }
+
+    /// Override the (hardened by default) sandbox policy.
+    pub fn with_sandbox_policy(mut self, policy: SandboxPolicy) -> Self {
+        self.policy = policy;
+        self
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
@@ -428,13 +499,23 @@ edition = "2021"
         // Add resource limits if specified
         if let Some(memory_mb) = self.memory_limit_mb {
             cmd.arg("-m").arg(format!("{}m", memory_mb));
+            // Disable swap by pinning memory-swap to the memory limit.
+            if self.policy.disable_swap {
+                cmd.arg("--memory-swap").arg(format!("{}m", memory_mb));
+            }
         }
         if let Some(cpu_limit) = self.cpu_limit {
             cmd.arg("--cpus").arg(format!("{}", cpu_limit));
         }
 
-        // Add network isolation
+        // Add network isolation (untrusted generated code gets no network).
         cmd.arg("--network").arg("none");
+
+        // Apply the hardening policy (read-only rootfs, dropped capabilities,
+        // no-new-privileges, pids limit, non-root user, tmpfs scratch).
+        for flag in docker_security_flags(&self.policy) {
+            cmd.arg(flag);
+        }
 
         // Set working directory and image
         cmd.arg("-w").arg("/workspace");
@@ -538,4 +619,35 @@ struct ProcessResult {
     stdout: String,
     stderr: String,
     exit_code: i32,
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+
+    #[test]
+    fn default_policy_is_hardened() {
+        let flags = docker_security_flags(&SandboxPolicy::default());
+        let joined = flags.join(" ");
+        assert!(joined.contains("--read-only"));
+        assert!(joined.contains("--cap-drop ALL"));
+        assert!(joined.contains("--security-opt no-new-privileges"));
+        assert!(joined.contains("--pids-limit 256"));
+        assert!(joined.contains("--user 65534:65534"));
+        assert!(joined.contains("--tmpfs /tmp:rw,size=64m"));
+    }
+
+    #[test]
+    fn relaxed_policy_emits_no_flags() {
+        let policy = SandboxPolicy {
+            read_only_rootfs: false,
+            drop_all_capabilities: false,
+            no_new_privileges: false,
+            pids_limit: None,
+            run_as_user: None,
+            tmpfs_tmp_mb: None,
+            disable_swap: false,
+        };
+        assert!(docker_security_flags(&policy).is_empty());
+    }
 }

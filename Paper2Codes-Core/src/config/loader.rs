@@ -258,12 +258,88 @@ impl ConfigLoader {
             config.storage.password = Some(password);
         }
 
+        // Secret-file convention (Docker/Kubernetes secrets, systemd credentials):
+        // a `*_FILE` env var points at a file whose trimmed contents are the
+        // secret. Keeps plaintext secrets out of config files and process args.
+        Self::apply_secret_files(config);
+
         Ok(())
+    }
+
+    /// Read secrets from files referenced by `*_FILE` environment variables.
+    fn apply_secret_files(config: &mut Config) {
+        use crate::config::ProviderConfig;
+
+        // JWT secret.
+        if let Some(secret) = read_secret_file("JWT_SECRET_FILE") {
+            config.api.auth.jwt_secret = secret;
+        }
+        // Storage password.
+        if let Some(secret) = read_secret_file("DATABASE_PASS_FILE") {
+            config.storage.password = Some(secret);
+        }
+        // Per-provider API keys: <PROVIDER>_API_KEY_FILE.
+        for info in crate::config::KNOWN_PROVIDERS {
+            let var = format!("{}_API_KEY_FILE", info.id.to_uppercase());
+            if let Some(key) = read_secret_file(&var) {
+                let entry = config
+                    .llm
+                    .providers
+                    .entry(info.id.to_string())
+                    .or_insert_with(|| ProviderConfig::for_provider(info.id));
+                entry.api_key = Some(key);
+                entry.enabled = true;
+            }
+        }
     }
 }
 
 impl Default for ConfigLoader {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Read a secret from the file named by environment variable `var` (the `*_FILE`
+/// convention). Returns the trimmed contents, or `None` if the var is unset, the
+/// file is unreadable, or the contents are empty.
+fn read_secret_file(var: &str) -> Option<String> {
+    let path = std::env::var(var).ok()?;
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => {
+            let trimmed = contents.trim().to_string();
+            if trimmed.is_empty() {
+                tracing::warn!("Secret file {} ({}) is empty", var, path);
+                None
+            } else {
+                Some(trimmed)
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to read secret file {} ({}): {}", var, path, e);
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod secret_file_tests {
+    use super::*;
+
+    #[test]
+    fn reads_and_trims_secret_file() {
+        let dir = std::env::temp_dir().join(format!("p2c_secret_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("jwt.txt");
+        std::fs::write(&path, "  super-secret-value\n").unwrap();
+
+        let var = "P2C_TEST_JWT_SECRET_FILE";
+        std::env::set_var(var, &path);
+        assert_eq!(read_secret_file(var).as_deref(), Some("super-secret-value"));
+        std::env::remove_var(var);
+
+        // Missing var -> None.
+        assert_eq!(read_secret_file("P2C_TEST_DEFINITELY_UNSET_FILE"), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

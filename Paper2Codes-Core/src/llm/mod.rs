@@ -1,3 +1,4 @@
+pub mod budget;
 pub mod cache;
 pub mod client;
 pub mod merge;
@@ -5,6 +6,7 @@ pub mod request;
 pub mod router;
 pub mod strategy;
 
+pub use budget::TokenBudget;
 pub use client::{LLMClient, LLMResponse, Message, MessageRole};
 pub use request::LLMRequest;
 pub use router::LLMRouter;
