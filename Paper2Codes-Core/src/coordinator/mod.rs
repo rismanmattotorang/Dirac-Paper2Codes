@@ -177,7 +177,15 @@ impl TaskQueue {
 
 impl Coordinator {
     pub async fn new(config: Config) -> Result<Self> {
-        let llm_router = Arc::new(LLMRouter::new(config.clone())?);
+        // Build the LLM router, attaching a per-run token budget (cost control)
+        // when configured.
+        let mut router = LLMRouter::new(config.clone())?;
+        if config.llm.max_tokens_per_run > 0 {
+            router = router.with_budget(std::sync::Arc::new(crate::llm::TokenBudget::new(
+                config.llm.max_tokens_per_run,
+            )));
+        }
+        let llm_router = Arc::new(router);
 
         // Build the CPR engine, wiring optional Phase 3 augmentation when the
         // required services are available. These are capability-gated feature

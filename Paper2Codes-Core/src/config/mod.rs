@@ -35,6 +35,10 @@ pub struct LLMConfig {
     pub max_retries: u32,
     #[serde(default = "default_retry_delay_ms")]
     pub retry_delay_ms: u64,
+    /// Maximum LLM tokens a single run (e.g. one paper) may consume. 0 =
+    /// unlimited. Enforced by the router's [`crate::llm::TokenBudget`].
+    #[serde(default)]
+    pub max_tokens_per_run: u64,
 }
 
 fn default_retry_delay_ms() -> u64 {
@@ -519,6 +523,7 @@ impl Config {
                 timeout_seconds: 300,
                 max_retries: 3,
                 retry_delay_ms: 1000,
+                max_tokens_per_run: 0,
             },
             agents: AgentConfig {
                 planning_model: "openai/gpt-4-turbo".to_string(),

@@ -20,6 +20,9 @@ pub struct LLMRouter {
     strategy: LlmStrategy,
     strategy_client: Option<StrategyLLMClient>,
     rate_limiter: Option<Arc<SmartRateLimiter>>,
+    /// Optional per-run token budget (cost control). Rejects calls that would
+    /// exceed the budget before they are sent to the provider.
+    budget: Option<Arc<crate::llm::TokenBudget>>,
 }
 
 impl LLMRouter {
@@ -132,7 +135,14 @@ impl LLMRouter {
             strategy,
             strategy_client,
             rate_limiter,
+            budget: None,
         })
+    }
+
+    /// Attach a per-run token budget (cost control).
+    pub fn with_budget(mut self, budget: Arc<crate::llm::TokenBudget>) -> Self {
+        self.budget = Some(budget);
+        self
     }
 
     /// Set routing strategy
@@ -286,6 +296,11 @@ impl LLMRouter {
                 content_tokens + 10 // Add overhead for message formatting
             })
             .sum::<u32>();
+
+        // Enforce the per-run token budget (cost control) before dispatching.
+        if let Some(ref budget) = self.budget {
+            budget.try_consume(estimated_tokens as u64)?;
+        }
 
         // Acquire rate limit permit if rate limiter is enabled
         let _rate_limit_permit = if let Some(ref limiter) = self.rate_limiter {

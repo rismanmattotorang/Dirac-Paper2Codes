@@ -15,7 +15,7 @@ use crate::skills::{Skill, SkillRegistry};
 use axum::extract::{Extension, Multipart, Path, Query};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
@@ -253,6 +253,65 @@ fn resolve_skill(skill_id: &str) -> Option<Skill> {
     registry.get(skill_id).cloned()
 }
 
+/// Durable-job payload for `paper_generation` jobs.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaperJobPayload {
+    pub paper_id: String,
+    #[serde(default)]
+    pub skill_id: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+/// Job handler that runs the paper processing + skill-guided generation
+/// pipeline for an enqueued `paper_generation` job.
+pub struct PaperJobHandler {
+    pub state: Arc<AppState>,
+}
+
+#[async_trait::async_trait]
+impl crate::jobs::JobHandler for PaperJobHandler {
+    async fn handle(&self, job: &crate::jobs::Job) -> crate::error::Result<()> {
+        let payload: PaperJobPayload = serde_json::from_str(&job.payload).map_err(|e| {
+            crate::error::Paper2CodesError::Validation(format!("invalid job payload: {}", e))
+        })?;
+
+        // Load the paper from storage.
+        let paper = {
+            let guard = self.state.storage.read().await;
+            match guard.as_ref() {
+                Some(storage) => storage.get_paper(&payload.paper_id).await?,
+                None => {
+                    return Err(crate::error::Paper2CodesError::Storage(
+                        crate::storage::errors::StorageError::NotConnected,
+                    ))
+                }
+            }
+        }
+        .ok_or_else(|| {
+            crate::error::Paper2CodesError::Validation(format!(
+                "paper {} not found",
+                payload.paper_id
+            ))
+        })?;
+
+        // Resolve the domain-skill profile, if any.
+        let profile = match payload.skill_id.as_deref() {
+            Some(id) if !id.is_empty() => resolve_skill(id).map(|s| (s, payload.language.clone())),
+            _ => None,
+        };
+
+        process_paper_background(
+            self.state.clone(),
+            paper,
+            payload.paper_id.clone(),
+            job.id.to_string(),
+            profile,
+        )
+        .await
+    }
+}
+
 pub async fn process_paper(
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<String>,
@@ -298,8 +357,9 @@ pub async fn process_paper(
         }
     };
 
-    let paper = match paper_result {
-        Ok(Some(paper)) => paper,
+    // Existence check (the worker re-loads the paper when it runs the job).
+    match paper_result {
+        Ok(Some(_)) => {}
         Ok(None) => {
             return Err(error_response(
                 StatusCode::NOT_FOUND,
@@ -317,34 +377,35 @@ pub async fn process_paper(
                 request_id,
             ));
         }
-    };
-
-    // Start async processing in background
-    let state_clone = state.clone();
-    let paper_id = id.clone();
-    let request_id_clone = request_id.clone();
-
-    // Broadcast initial processing started message
-    #[cfg(feature = "api")]
-    {
-        let _ = broadcast::broadcast_paper_processed(
-            &state,
-            &paper_id,
-            "processing",
-            0,
-            Some("Paper processing started".to_string()),
-        )
-        .await;
     }
+
+    let paper_id = id.clone();
 
     if let Some((skill, _)) = &profile {
-        info!(request_id = %request_id, paper_id = %id, skill = %skill.id, "Processing with domain skill");
+        info!(request_id = %request_id, paper_id = %id, skill = %skill.id, "Queued with domain skill");
     }
 
-    tokio::spawn(async move {
-        let _ = process_paper_background(state_clone, paper, paper_id, request_id_clone, profile)
-            .await;
-    });
+    // Broadcast queued status.
+    let _ = broadcast::broadcast_paper_processed(
+        &state,
+        &paper_id,
+        "queued",
+        0,
+        Some("Paper processing queued".to_string()),
+    )
+    .await;
+
+    // Enqueue a durable job. A background worker performs the work, so it
+    // survives restarts, can retry with backoff, and is trackable/cancellable —
+    // rather than a fire-and-forget in-process task.
+    let payload = serde_json::to_string(&PaperJobPayload {
+        paper_id: paper_id.clone(),
+        skill_id: params.skill_id.clone(),
+        language: params.language.clone(),
+    })
+    .unwrap_or_default();
+    let job_id = state.job_queue.enqueue("paper_generation", payload, 2).await;
+    info!(request_id = %request_id, paper_id = %id, job_id = %job_id, "Enqueued paper processing job");
 
     // Return immediately with pending status
     let status = ProcessingStatusResponse {

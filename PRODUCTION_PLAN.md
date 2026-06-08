@@ -65,9 +65,11 @@ production** — to a reliable, secure, observable production service.
 - ✅ **Secret redaction** helper (`config::redact`).
 - ✅ **Supply-chain audit** CI job (`cargo audit` + `pnpm audit`, informational).
 
+- ✅ **Real auth**: stateful `UserStore` + `SessionStore`; `register`/`login`/`refresh` (with refresh-token rotation + session revocation)/`logout`/`me` wired to the stores; first account becomes admin; env-seeded admin (`ADMIN_USERNAME`/`ADMIN_PASSWORD`); RBAC roles on claims; settings session list/revoke now use the live store.
+
 *Remaining (infra / larger work):*
 - Integrate a managed **secret manager** (Vault / cloud KMS / k8s Secrets) + rotation; encrypt-at-rest.
-- Real **auth**: finish password policy, sessions, 2FA (currently mocked); RBAC + per-user API tokens; fix Web UI token handling.
+- Persist users/sessions in SurrealDB (currently in-memory); add **2FA** and per-user API tokens; finish Web UI login/token-refresh UX.
 - Harden SurrealDB deployment: non-default creds wired via secrets, least-privilege user, network isolation, TLS.
 - Add **SAST** (CodeQL) + **secret scanning** (gitleaks) + an **SBOM** per release; promote audits to required.
 - **Exit criteria:** secret-scan clean; no default credentials anywhere; auth flows tested; threat model documented.
@@ -76,12 +78,13 @@ production** — to a reliable, secure, observable production service.
 *Shipped (code-level):*
 - ✅ **Sandbox hardening** (`execution::SandboxPolicy` + `docker_security_flags`): read-only rootfs, `--cap-drop ALL`, `no-new-privileges`, pids limit, non-root user, tmpfs scratch, no swap — applied on top of the existing network-isolation + read-only mount.
 - ✅ **Durable job queue** (`jobs::JobQueue`): persisted job state (status/attempts/progress/last-error), claim/complete/**retry with exponential backoff**/cancel, and a `JobHandler` worker loop. Serialisable `Job` model maps onto SurrealDB for cross-restart durability.
-- ✅ **Per-run token budget** (`llm::TokenBudget`): atomic, rejects overspend.
+- ✅ **Per-run token budget** (`llm::TokenBudget`) wired into `LLMRouter` (rejects calls that would exceed `llm.max_tokens_per_run` before dispatch); the coordinator attaches it per run.
+- ✅ **Generation routed through the queue**: `POST /api/papers/:id/process` now enqueues a `paper_generation` job; a worker started in the API bootstrap runs the pipeline via `PaperJobHandler` (replacing the fire-and-forget spawn).
 
 *Remaining (infra / wiring):*
-- Back the queue with SurrealDB (cross-process/-restart durability) and route the API generation path through it (replace the in-process spawn); start the worker in the server bootstrap.
+- Back the queue + user/session stores with SurrealDB for cross-process/-restart durability (currently in-memory, durable within the process).
 - Stronger isolation tier (gVisor/Firecracker) + seccomp profile for the execution image.
-- Per-tenant rate limits/quotas, provider circuit breakers, and spend metrics; wire `TokenBudget` into the router/coordinator per run.
+- Per-tenant rate limits/quotas, provider circuit breakers, and spend metrics.
 - **Exit criteria:** generated code can never touch the host; a worker crash/restart loses no work; a runaway paper can't exceed its budget.
 
 ### Phase 3 — Generated-artifact UX & data lifecycle

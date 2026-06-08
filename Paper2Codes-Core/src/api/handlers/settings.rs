@@ -150,7 +150,7 @@ pub async fn get_settings(
         },
         security: SecuritySettings {
             two_factor_enabled: false, // TODO: Implement 2FA
-            active_sessions: get_active_sessions().await,
+            active_sessions: get_active_sessions(&state).await,
             password_min_length: config.api.auth.password_min_length,
             jwt_expiration: config.api.auth.jwt_expiration,
             enable_csrf: config.api.auth.enable_csrf,
@@ -399,7 +399,7 @@ pub async fn update_settings(
         },
         security: SecuritySettings {
             two_factor_enabled: false,
-            active_sessions: get_active_sessions().await,
+            active_sessions: get_active_sessions(&state).await,
             password_min_length: config.api.auth.password_min_length,
             jwt_expiration: config.api.auth.jwt_expiration,
             enable_csrf: config.api.auth.enable_csrf,
@@ -469,15 +469,21 @@ pub async fn update_settings(
     Ok(Json(settings))
 }
 
-/// Get active sessions (mock data for now)
-async fn get_active_sessions() -> Vec<SessionInfo> {
-    vec![SessionInfo {
-        id: "session_1".to_string(),
-        device: "Chrome on macOS".to_string(),
-        ip: "192.168.1.100".to_string(),
-        last_active: "Just now".to_string(),
-        created_at: "2024-11-29T10:00:00Z".to_string(),
-    }]
+/// Get active sessions from the live session store.
+async fn get_active_sessions(state: &AppState) -> Vec<SessionInfo> {
+    state
+        .session_store
+        .all_active()
+        .await
+        .into_iter()
+        .map(|s| SessionInfo {
+            id: s.id,
+            device: "API session".to_string(),
+            ip: "-".to_string(),
+            last_active: s.last_used_at.to_rfc3339(),
+            created_at: s.created_at.to_rfc3339(),
+        })
+        .collect()
 }
 
 /// Get team members (mock data for now)
@@ -493,13 +499,11 @@ async fn get_team_members() -> Vec<TeamMember> {
 
 /// Revoke a session
 pub async fn revoke_session(
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     axum::extract::Path(session_id): axum::extract::Path<String>,
 ) -> Result<StatusCode> {
     info!("Revoking session: {}", session_id);
-
-    // TODO: Implement session revocation
-
+    state.session_store.revoke(&session_id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
