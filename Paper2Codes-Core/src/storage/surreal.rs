@@ -1600,6 +1600,99 @@ impl Storage for SurrealStorage {
 
         Ok(count)
     }
+
+    async fn list_users(&self) -> Result<Vec<crate::api::auth::user::User>> {
+        let db = self.db()?;
+
+        let result: Vec<serde_json::Value> = db
+            .query("SELECT * FROM user")
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to list users: {}", e)))?
+            .take(0)
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to take result: {}", e)))?;
+
+        let mut users = Vec::new();
+        for user_json in result {
+            if let Ok(user) = self.deserialize_user(user_json) {
+                users.push(user);
+            }
+        }
+        Ok(users)
+    }
+
+    async fn list_sessions(&self) -> Result<Vec<crate::api::auth::user::Session>> {
+        let db = self.db()?;
+
+        let result: Vec<serde_json::Value> = db
+            .query("SELECT * FROM session")
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to list sessions: {}", e)))?
+            .take(0)
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to take result: {}", e)))?;
+
+        let mut sessions = Vec::new();
+        for session_json in result {
+            if let Ok(session) = self.deserialize_session(session_json) {
+                sessions.push(session);
+            }
+        }
+        Ok(sessions)
+    }
+
+    async fn save_job(&self, job: &crate::jobs::Job) -> Result<()> {
+        let db = self.db()?;
+
+        // Store the whole job as a JSON blob keyed by its uuid. This sidesteps
+        // SurrealDB record-id/Thing type-mapping issues for the typed `Job`
+        // (whose `id` is a `Uuid`) and keeps the schema trivial.
+        let data = serde_json::to_string(job).map_err(|e| {
+            StorageError::Serialization(format!("Failed to serialize job: {}", e))
+        })?;
+
+        #[derive(serde::Serialize)]
+        struct JobContent {
+            data: String,
+            status: String,
+            updated_at: chrono::DateTime<Utc>,
+        }
+
+        let _: Option<serde_json::Value> = db
+            .update(("job", job.id.to_string()))
+            .content(JobContent {
+                data,
+                status: format!("{:?}", job.status),
+                updated_at: job.updated_at,
+            })
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to save job: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn list_jobs(&self) -> Result<Vec<crate::jobs::Job>> {
+        let db = self.db()?;
+
+        #[derive(serde::Deserialize)]
+        struct JobRow {
+            data: String,
+        }
+
+        // Only the `data` blob is read; the SurrealDB record `id` (a Thing) is
+        // ignored by serde, avoiding any type-mapping problems.
+        let rows: Vec<JobRow> = db
+            .select("job")
+            .await
+            .map_err(|e| StorageError::QueryFailed(format!("Failed to list jobs: {}", e)))?;
+
+        let mut jobs = Vec::new();
+        for row in rows {
+            match serde_json::from_str::<crate::jobs::Job>(&row.data) {
+                Ok(job) => jobs.push(job),
+                Err(e) => tracing::warn!(error = %e, "skipping unparseable job record"),
+            }
+        }
+        Ok(jobs)
+    }
 }
 
 impl Default for SurrealStorage {
