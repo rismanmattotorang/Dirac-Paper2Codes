@@ -1,0 +1,13 @@
+Needleman-Wunsch Global Sequence Alignment
+
+Abstract. The Needleman-Wunsch algorithm computes the optimal global alignment
+score of two sequences via dynamic programming.
+
+1. Method (Algorithm 1). Build an (m+1) x (n+1) matrix F with a linear gap
+penalty g and match/mismatch scores:
+  Equation (1): F[i,0] = i*g,  F[0,j] = j*g
+  Equation (2): F[i,j] = max(F[i-1,j-1] + s(a_i,b_j), F[i-1,j] + g, F[i,j-1] + g)
+The optimal global score is F[m,n].
+
+2. Implementation notes. Return the optimal alignment score for given
+match/mismatch/gap parameters. Validate on identical sequences (score = m*match).

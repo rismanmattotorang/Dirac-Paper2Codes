@@ -30,6 +30,21 @@ directory. See [`manifest.example.json`](manifest.example.json):
 
 `reference_repo`, `rubric_path`, and `skill_id` are optional per case.
 
+### Enabling the quality gate
+
+The nightly workflow (`.github/workflows/benchmark.yml`) gates automatically once
+a baseline is committed:
+
+1. After the first reviewed live run, save its report as `bench/baseline.json`
+   (see [`baseline.example.json`](baseline.example.json) — only the `aggregate`
+   means are used for the no-regression check).
+2. Optionally set score floors as repo **Variables**:
+   `BENCH_MIN_REFERENCE_OVERALL`, `BENCH_MIN_RUBRIC`.
+
+The workflow then runs `bench --rubric --baseline bench/baseline.json
+[--min-...]`, which exits non-zero on a regression or floor breach. Without a
+baseline it only measures (no gate).
+
 ### Bundled dataset
 
 `bench/dataset/` ships a ready-to-run suite — one case per built-in domain skill

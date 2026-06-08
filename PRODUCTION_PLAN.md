@@ -48,13 +48,14 @@ production** — to a reliable, secure, observable production service.
 - ✅ **LLM-judge rubric scoring** (`--rubric`, reference-free 0–1 faithfulness).
 - ✅ **Quality gate** (`--min-reference-overall`, `--min-rubric`, `--baseline`) that exits non-zero on a floor breach or regression — ready to gate releases (§7).
 - ✅ **Nightly benchmark workflow** (`.github/workflows/benchmark.yml`): live when an API-key secret is set, offline smoke otherwise; uploads `report.json`.
-- ✅ Dataset expanded (10 cases, all domains; living artifact).
+- ✅ Dataset expanded to **25 cases** across all 8 domains (living artifact).
+- ✅ Gate auto-enables in the nightly workflow once `bench/baseline.json` is committed (+ optional floors via repo variables).
 
 *Remaining (needs keys / human review):*
 - Provision LLM keys (OpenAI/Anthropic/OpenRouter) in a **secret store**, not config files.
-- Run `paper2codes bench --rubric` (live); record per-domain file-F1, content similarity, and rubric score.
-- Grow the dataset toward ≥25 cases (harder multi-file references); consider wiring **PaperBench** for scale.
-- Establish the **score floor** from the first live runs and turn the gate on in CI.
+- Run `paper2codes bench --rubric` (live); record per-domain file-F1, content similarity, and rubric score; commit the first reviewed report as `bench/baseline.json`.
+- Establish the **score floor** from the first live runs (set `BENCH_MIN_*` repo variables); the gate then enforces it automatically.
+- Optionally add harder multi-file references / wire **PaperBench** for scale.
 - **Exit criteria:** reproducible benchmark report; agreed score floor; ≥1 end-to-end paper→repo run reviewed by a domain expert.
 
 ### Phase 1 — Security & secrets hardening

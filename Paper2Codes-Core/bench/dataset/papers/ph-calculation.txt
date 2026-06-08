@@ -1,0 +1,11 @@
+pH from Hydrogen Ion Concentration
+
+Abstract. The pH of an aqueous solution is the negative base-10 logarithm of the
+hydrogen-ion activity.
+
+1. Definition.
+  Equation (1): pH = -log10([H+])
+  Equation (2): pOH = 14 - pH    (at 25 C)
+
+2. Implementation notes. Given [H+] in mol/L (> 0), return pH (and pOH).
+Validate that [H+] = 1e-7 yields pH 7 (neutral).

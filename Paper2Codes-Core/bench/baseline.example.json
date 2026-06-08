@@ -1,0 +1,13 @@
+{
+  "name": "baseline-example",
+  "cases": [],
+  "aggregate": {
+    "case_count": 25,
+    "scored_count": 25,
+    "mean_file_f1": 0.0,
+    "mean_content_similarity": 0.0,
+    "mean_reference_overall": 0.6,
+    "mean_rubric": 0.6,
+    "error_count": 0
+  }
+}

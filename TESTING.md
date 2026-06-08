@@ -63,21 +63,20 @@ What it covers:
 
 ## 2. The benchmark dataset
 
-`Paper2Codes-Core/bench/dataset/` ships a small, self-contained, domain-mapped
-benchmark (no external/licensed papers required):
+`Paper2Codes-Core/bench/dataset/` ships a self-contained, domain-mapped
+benchmark (no external/licensed papers required) — **25 cases** spanning all 8
+built-in domain skills, e.g.:
 
-| Case | Skill | Reference |
-|---|---|---|
-| `black-scholes` | computational-finance | European option pricing |
-| `newton-sqrt` | computational-physics | Newton's method for √a |
-| `lennard-jones` | computational-chemistry | Lennard-Jones (12-6) potential |
-| `gc-content` | computational-biology-bioinformatics | GC content + reverse complement |
-| `kmer-count` | computational-genomics | k-mer counting |
-| `bell-state` | quantum-computation | Two-qubit Bell state |
-| `heat-1d` | computational-fluid-dynamics | 1D heat equation (explicit FTCS) |
-| `eoq` | computational-supply-chain | Economic Order Quantity |
-
-One case per built-in domain skill (8 total).
+| Domain skill | Example cases |
+|---|---|
+| computational-finance | black-scholes, mean-variance-portfolio, binomial-option, sharpe-ratio |
+| computational-physics | newton-sqrt, verlet-integrator, projectile-motion, rk4-ode |
+| computational-chemistry | lennard-jones, molar-mass, ph-calculation |
+| computational-biology-bioinformatics | gc-content, hamming-distance, needleman-wunsch |
+| computational-genomics | kmer-count, transcribe-translate, gc-skew |
+| quantum-computation | bell-state, single-qubit-gates, qubit-measurement |
+| computational-fluid-dynamics | heat-1d, advection-1d, poiseuille-flow |
+| computational-supply-chain | eoq, reorder-point |
 
 Each case has a paper (`papers/*.txt`), an author-style reference repo
 (`refs/*/main.py`), and an entry in `manifest.json`. Scoring is reference-based

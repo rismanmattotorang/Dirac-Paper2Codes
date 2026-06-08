@@ -60,11 +60,32 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Optional floors via repo variables (Settings → Variables → Actions):
+          BENCH_MIN_REFERENCE_OVERALL: ${{ vars.BENCH_MIN_REFERENCE_OVERALL }}
+          BENCH_MIN_RUBRIC: ${{ vars.BENCH_MIN_RUBRIC }}
+          DISPATCH_MIN: ${{ github.event.inputs.min_reference_overall }}
         run: |
           ARGS="bench --manifest bench/dataset/manifest.json --rubric --output report.json"
-          if [ -n "${{ github.event.inputs.min_reference_overall }}" ]; then
-            ARGS="$ARGS --min-reference-overall ${{ github.event.inputs.min_reference_overall }}"
+
+          # The quality gate activates automatically once a baseline is committed
+          # to bench/baseline.json (typically the first reviewed live report).
+          if [ -f bench/baseline.json ]; then
+            echo "Baseline found → no-regression gate enabled"
+            ARGS="$ARGS --baseline bench/baseline.json"
+          else
+            echo "No bench/baseline.json yet → measuring only (no regression gate)"
           fi
+
+          # Score floors: dispatch input wins, else repo variables.
+          MIN_REF="${DISPATCH_MIN:-$BENCH_MIN_REFERENCE_OVERALL}"
+          if [ -n "$MIN_REF" ]; then
+            ARGS="$ARGS --min-reference-overall $MIN_REF"
+          fi
+          if [ -n "$BENCH_MIN_RUBRIC" ]; then
+            ARGS="$ARGS --min-rubric $BENCH_MIN_RUBRIC"
+          fi
+
+          echo "Running: cargo run -- $ARGS"
           cargo run -- $ARGS
 
       - name: Offline smoke (no API key configured)

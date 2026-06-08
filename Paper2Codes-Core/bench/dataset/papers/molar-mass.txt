@@ -1,0 +1,10 @@
+Molar Mass from a Chemical Formula
+
+Abstract. Compute the molar mass of a compound from its chemical formula by
+summing atomic weights.
+
+1. Method (Algorithm 1). Parse the formula into element-count pairs (e.g. H2O ->
+{H:2, O:1}) and sum count * atomic_weight over elements.
+
+2. Implementation notes. Support multi-letter elements (e.g. Na, Cl) and counts.
+Validate that H2O is approximately 18.015 g/mol.

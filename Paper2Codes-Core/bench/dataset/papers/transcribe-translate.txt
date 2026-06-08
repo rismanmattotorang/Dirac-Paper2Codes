@@ -1,0 +1,11 @@
+DNA Transcription and Translation
+
+Abstract. The central dogma maps DNA to RNA (transcription) and RNA to a protein
+sequence (translation) via the genetic code.
+
+1. Method (Algorithm 1). Transcription replaces T with U. Translation reads RNA
+in codons (length-3) using the standard codon table until a stop codon.
+
+2. Implementation notes. Provide transcribe(dna) -> rna and translate(rna) ->
+protein (single-letter amino acids), stopping at the first stop codon. Validate
+that "ATG...TAA" begins with M and terminates at the stop.

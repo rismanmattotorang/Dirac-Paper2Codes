@@ -1,0 +1,11 @@
+Measurement Probabilities of a Qubit State
+
+Abstract. Measuring a qubit in the computational basis yields outcome k with
+probability |amplitude_k|^2 (the Born rule).
+
+1. Definition. For state vector psi:
+  Equation (1): P(k) = |psi_k|^2,  with sum_k P(k) = 1
+
+2. Implementation notes. Given complex amplitudes, return the measurement
+probabilities. Validate that they are non-negative and sum to 1; reject
+unnormalised states beyond a tolerance.

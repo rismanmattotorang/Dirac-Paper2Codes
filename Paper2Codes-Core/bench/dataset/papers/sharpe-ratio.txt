@@ -1,0 +1,11 @@
+The Sharpe Ratio of a Return Series
+
+Abstract. The Sharpe ratio measures risk-adjusted return: excess return per unit
+of volatility.
+
+1. Definition. For periodic returns r_t with risk-free rate rf:
+  Equation (1): Sharpe = mean(r_t - rf) / std(r_t - rf)
+Annualise by multiplying by sqrt(periods_per_year).
+
+2. Implementation notes. Accept a return series and risk-free rate; return the
+(optionally annualised) Sharpe ratio. Handle zero variance gracefully.

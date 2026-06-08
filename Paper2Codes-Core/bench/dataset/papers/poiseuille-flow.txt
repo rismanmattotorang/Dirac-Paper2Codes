@@ -1,0 +1,11 @@
+Plane Poiseuille Flow Velocity Profile
+
+Abstract. Steady laminar flow between two parallel plates driven by a pressure
+gradient has a parabolic velocity profile (closed form).
+
+1. Model. For channel half-width h, dynamic viscosity mu, pressure gradient
+dp/dx, the velocity at transverse position y in [-h, h] is:
+  Equation (1): u(y) = -(1/(2 mu)) (dp/dx) (h^2 - y^2)
+
+2. Implementation notes. Return u(y) over the channel; the maximum is at the
+centre (y = 0) and u(+/-h) = 0 (no-slip). Validate the no-slip boundary.
