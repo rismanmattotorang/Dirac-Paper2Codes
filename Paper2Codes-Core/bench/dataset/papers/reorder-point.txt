@@ -1,0 +1,12 @@
+Inventory Reorder Point with Safety Stock
+
+Abstract. The reorder point (ROP) triggers replenishment to cover demand during
+the supplier lead time, plus a safety buffer against variability.
+
+1. Model. For mean daily demand d, lead time L (days), demand standard deviation
+sigma_d, and service-level z-score z:
+  Equation (1): safety_stock = z * sigma_d * sqrt(L)
+  Equation (2): ROP = d * L + safety_stock
+
+2. Implementation notes. Return the reorder point and safety stock. Validate
+that zero variability (sigma_d = 0) yields ROP = d * L.

@@ -1,0 +1,10 @@
+Hamming Distance between DNA Sequences
+
+Abstract. The Hamming distance counts positions at which two equal-length
+sequences differ; in genomics it quantifies point mutations.
+
+1. Definition. For equal-length strings a and b:
+  Equation (1): d(a,b) = sum_i [ a_i != b_i ]
+
+2. Implementation notes. Validate inputs are equal length (error otherwise) and
+over a nucleotide alphabet. Return the integer distance; d(x,x)=0.

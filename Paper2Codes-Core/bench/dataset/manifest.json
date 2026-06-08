@@ -60,6 +60,96 @@
       "paper_path": "papers/verlet-integrator.txt",
       "reference_repo": "refs/verlet-integrator",
       "skill_id": "computational-physics"
+    },
+    {
+      "id": "binomial-option",
+      "paper_path": "papers/binomial-option.txt",
+      "reference_repo": "refs/binomial-option",
+      "skill_id": "computational-finance"
+    },
+    {
+      "id": "sharpe-ratio",
+      "paper_path": "papers/sharpe-ratio.txt",
+      "reference_repo": "refs/sharpe-ratio",
+      "skill_id": "computational-finance"
+    },
+    {
+      "id": "projectile-motion",
+      "paper_path": "papers/projectile-motion.txt",
+      "reference_repo": "refs/projectile-motion",
+      "skill_id": "computational-physics"
+    },
+    {
+      "id": "rk4-ode",
+      "paper_path": "papers/rk4-ode.txt",
+      "reference_repo": "refs/rk4-ode",
+      "skill_id": "computational-physics"
+    },
+    {
+      "id": "molar-mass",
+      "paper_path": "papers/molar-mass.txt",
+      "reference_repo": "refs/molar-mass",
+      "skill_id": "computational-chemistry"
+    },
+    {
+      "id": "ph-calculation",
+      "paper_path": "papers/ph-calculation.txt",
+      "reference_repo": "refs/ph-calculation",
+      "skill_id": "computational-chemistry"
+    },
+    {
+      "id": "hamming-distance",
+      "paper_path": "papers/hamming-distance.txt",
+      "reference_repo": "refs/hamming-distance",
+      "skill_id": "computational-biology-bioinformatics"
+    },
+    {
+      "id": "needleman-wunsch",
+      "paper_path": "papers/needleman-wunsch.txt",
+      "reference_repo": "refs/needleman-wunsch",
+      "skill_id": "computational-biology-bioinformatics"
+    },
+    {
+      "id": "transcribe-translate",
+      "paper_path": "papers/transcribe-translate.txt",
+      "reference_repo": "refs/transcribe-translate",
+      "skill_id": "computational-genomics"
+    },
+    {
+      "id": "gc-skew",
+      "paper_path": "papers/gc-skew.txt",
+      "reference_repo": "refs/gc-skew",
+      "skill_id": "computational-genomics"
+    },
+    {
+      "id": "single-qubit-gates",
+      "paper_path": "papers/single-qubit-gates.txt",
+      "reference_repo": "refs/single-qubit-gates",
+      "skill_id": "quantum-computation"
+    },
+    {
+      "id": "qubit-measurement",
+      "paper_path": "papers/qubit-measurement.txt",
+      "reference_repo": "refs/qubit-measurement",
+      "skill_id": "quantum-computation"
+    },
+    {
+      "id": "advection-1d",
+      "paper_path": "papers/advection-1d.txt",
+      "reference_repo": "refs/advection-1d",
+      "skill_id": "computational-fluid-dynamics"
+    },
+    {
+      "id": "poiseuille-flow",
+      "paper_path": "papers/poiseuille-flow.txt",
+      "reference_repo": "refs/poiseuille-flow",
+      "skill_id": "computational-fluid-dynamics"
+    },
+    {
+      "id": "reorder-point",
+      "paper_path": "papers/reorder-point.txt",
+      "reference_repo": "refs/reorder-point",
+      "skill_id": "computational-supply-chain"
     }
   ]
 }

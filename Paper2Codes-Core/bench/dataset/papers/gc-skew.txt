@@ -1,0 +1,11 @@
+GC Skew along a Genome
+
+Abstract. GC skew, (G - C)/(G + C) over a window, helps locate replication
+origins/termini in bacterial genomes.
+
+1. Definition. For counts of G and C in a window:
+  Equation (1): skew = (G - C) / (G + C)   (0 when G + C = 0)
+
+2. Implementation notes. Compute the cumulative GC skew across a sequence and
+return the position of its minimum (a common origin heuristic). Validate counts
+on a small example.

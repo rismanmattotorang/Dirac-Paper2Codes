@@ -1,0 +1,13 @@
+Cox-Ross-Rubinstein Binomial Option Pricing
+
+Abstract. The CRR binomial model prices a European option by discretising the
+underlying's evolution into an N-step recombining tree.
+
+1. Method (Algorithm 1). With spot S, strike K, rate r, volatility sigma, and
+maturity T over N steps (dt = T/N):
+  Equation (1): u = exp(sigma sqrt(dt)),  d = 1/u
+  Equation (2): p = (exp(r dt) - d) / (u - d)
+Terminal payoffs are max(S u^j d^{N-j} - K, 0); discount back by p, (1-p), e^{-r dt}.
+
+2. Implementation notes. Return the European call price; as N grows it should
+converge to the Black-Scholes value.

@@ -1,0 +1,11 @@
+Single-Qubit Gates: X and Hadamard
+
+Abstract. We apply the Pauli-X and Hadamard gates to a single qubit and inspect
+the resulting state vector.
+
+1. Definitions.
+  Equation (1): X = [[0,1],[1,0]],  H = (1/sqrt 2) [[1,1],[1,-1]]
+Starting from |0> = [1,0], X|0> = |1>, and H|0> = (|0>+|1>)/sqrt 2.
+
+2. Implementation notes. Apply a sequence of single-qubit gates to |0> and
+return the amplitudes. Validate that the state stays normalised.
